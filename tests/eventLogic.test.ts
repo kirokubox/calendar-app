@@ -4,10 +4,11 @@ import {
   allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, rangeForPlusButton, rangeFromTap, shiftEnd,
   titleSuggestions, validateEvent,
 } from "../src/eventLogic.js";
+import { eventDefaults } from "../src/migrate.js";
 import type { CalendarEvent } from "../src/types.js";
 
 function ev(id: string, title: string, start: string, end: string, extra: Partial<CalendarEvent> = {}): CalendarEvent {
-  return { id, title, start, end, allDay: false, colorId: null, kind: "actual", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...extra };
+  return { id, title, start, end, allDay: false, colorId: null, kind: "actual", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...eventDefaults(), ...extra };
 }
 
 test("終了日の自動翌日化：終了時刻が開始より前なら翌日", () => {

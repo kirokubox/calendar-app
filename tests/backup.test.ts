@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { backupFileName, buildBackup, mergeEvents, summarizeBackup, validateBackup } from "../src/backup.js";
 import { defaultSettings } from "../src/constants.js";
+import { eventDefaults } from "../src/migrate.js";
 import type { CalendarEvent } from "../src/types.js";
 
 function ev(id: string, start: string, end: string, extra: Partial<CalendarEvent> = {}): CalendarEvent {
-  return { id, title: id, start, end, allDay: false, colorId: "1", kind: "actual", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...extra };
+  return { id, title: id, start, end, allDay: false, colorId: "1", kind: "actual", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...eventDefaults(), ...extra };
 }
 
 test("初期のカテゴリ名", () => {
@@ -32,7 +33,7 @@ test("検証：別アプリ・形式違い・不正値は理由つきで拒否",
 
   assert.match(reason(null), /オブジェクト/);
   assert.match(reason({ ...clone(), app: "other" }), /バックアップではありません/);
-  assert.match(reason({ ...clone(), schemaVersion: 2 }), /schemaVersion/);
+  assert.match(reason({ ...clone(), schemaVersion: 3 }), /schemaVersion/);
   assert.match(reason({ ...clone(), events: {} }), /events/);
   let b = clone(); b.events[0].start = "2026/10/08 10:00";
   assert.match(reason(b), /events\[0\]\.start/);
@@ -51,7 +52,7 @@ test("検証：別アプリ・形式違い・不正値は理由つきで拒否",
 });
 
 test("検証：colorIdがnullは許可、colorLabelsの欠けたキーは空文字で補う", () => {
-  const b = buildBackup([ev("a", "2026-10-08T10:00", "2026-10-08T11:00", { colorId: null })], { schemaVersion: 1, colorLabels: { default: "x" } }, "x");
+  const b = buildBackup([ev("a", "2026-10-08T10:00", "2026-10-08T11:00", { colorId: null })], { ...defaultSettings(), colorLabels: { default: "x" } }, "x");
   const r = validateBackup(JSON.parse(JSON.stringify(b)));
   assert.equal(r.ok, true);
   if (r.ok) {

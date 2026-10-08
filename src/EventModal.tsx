@@ -2,28 +2,49 @@ import { useEffect, useMemo, useState } from "react";
 import { COLOR_HEX, COLOR_IDS } from "./constants";
 import { addDays, datePart, formatShortDate, joinLocal, timePart } from "./dateUtils";
 import {
-  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, shiftEnd, titleSuggestions, validateEvent, type Range,
+  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, peopleSuggestions, placeSuggestions, shiftEnd,
+  titleSuggestions, validateEvent, type Range,
 } from "./eventLogic";
+import { eventDefaults } from "./migrate";
+import { draftsFromNagara, nagaraLabelSuggestions, validateNagaraDrafts, type NagaraDraft } from "./nagaraLogic";
 import { newId } from "./storage";
-import type { CalendarEvent, ColorId, EventKind, Settings } from "./types";
+import ChipInput from "./ChipInput";
+import NagaraChips from "./NagaraChips";
+import SessionForm from "./SessionForm";
+import type { CalendarEvent, ColorId, EventKind, Nagara, Settings } from "./types";
+
+export type ModalTab = "event" | "session";
 
 interface Props {
-  mode: "new" | "edit";
+  /** new＝新規（イベント／セッションの切り替えあり）、edit＝イベントの編集、session＝セッションの編集 */
+  mode: "new" | "edit" | "session";
   event: CalendarEvent | null;
+  session: Nagara | null;
   range: Range | null;
+  initialTab: ModalTab;
   events: CalendarEvent[];
+  nagara: Nagara[];
   settings: Settings;
   /** 現在のローカル時刻（YYYY-MM-DDTHH:mm） */
   now: string;
-  onSave: (event: CalendarEvent) => Promise<void>;
+  onSave: (event: CalendarEvent, drafts: NagaraDraft[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onSaveSession: (n: Nagara) => Promise<void>;
+  onDeleteSession: (id: string) => Promise<void>;
   onClose: () => void;
 }
 
 const KIND_LABEL: Record<EventKind, string> = { plan: "予定", actual: "実績", unknown: "不明" };
 
-export default function EventModal({ mode, event, range, events, settings, now, onSave, onDelete, onClose }: Props) {
+export default function EventModal({
+  mode, event, session, range, initialTab, events, nagara, settings, now, onSave, onDelete, onSaveSession, onDeleteSession, onClose,
+}: Props) {
   const editing = mode === "edit" && event !== null;
+  const [tab, setTab] = useState<ModalTab>(mode === "session" ? "session" : initialTab);
+  const [people, setPeople] = useState<string[]>(event?.people ?? []);
+  const [places, setPlaces] = useState<string[]>(event?.places ?? []);
+  const [memo, setMemo] = useState(event?.memo ?? "");
+  const [drafts, setDrafts] = useState<NagaraDraft[]>(() => (event ? draftsFromNagara(nagara, event.id) : []));
   const initStart = event?.start ?? range?.start ?? now;
   const initEnd = event?.end ?? range?.end ?? now;
   const initAllDay = event?.allDay ?? false;
@@ -50,6 +71,10 @@ export default function EventModal({ mode, event, range, events, settings, now, 
   const [saveError, setSaveError] = useState("");
 
   const suggestions = useMemo(() => titleSuggestions(events), [events]);
+  const peopleList = useMemo(() => peopleSuggestions(events), [events]);
+  const placeList = useMemo(() => placeSuggestions(events), [events]);
+  const nagaraList = useMemo(() => nagaraLabelSuggestions(nagara, "nagara"), [nagara]);
+  const sessionLabelList = useMemo(() => nagaraLabelSuggestions(nagara), [nagara]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -59,7 +84,7 @@ export default function EventModal({ mode, event, range, events, settings, now, 
 
   const start = allDay ? buildAllDayRange(startDate, lastDate).start : joinLocal(startDate, startTime);
   const end = allDay ? buildAllDayRange(startDate, lastDate).end : joinLocal(endDate, endTime);
-  const error = validateEvent(title, start, end, allDay);
+  const error = validateEvent(title, start, end, allDay) ?? validateNagaraDrafts(drafts);
   const autoJudged = !editing && kindChoice === null;
   const kind: EventKind = kindChoice ?? autoKind(start, now);
 
@@ -126,6 +151,10 @@ export default function EventModal({ mode, event, range, events, settings, now, 
     setSaveError("");
     const stamp = new Date().toISOString();
     const next: CalendarEvent = {
+      ...(event ?? eventDefaults()),
+      people,
+      places,
+      memo,
       id: event?.id ?? newId(),
       title: title.trim(),
       start,
@@ -137,7 +166,7 @@ export default function EventModal({ mode, event, range, events, settings, now, 
       updatedAt: stamp,
     };
     try {
-      await onSave(next);
+      await onSave(next, drafts);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "保存できませんでした");
       setBusy(false);
@@ -181,10 +210,19 @@ export default function EventModal({ mode, event, range, events, settings, now, 
     <div className="modal-backdrop">
       <div className="sheet" role="dialog" aria-modal="true" aria-label={editing ? "予定・実績を編集" : "予定・実績を追加"}>
         <div className="sheet-head">
-          <h2>{editing ? "編集" : "新規作成"}</h2>
+          <h2>{editing || mode === "session" ? "編集" : "新規作成"}</h2>
           <button type="button" className="text-btn" onClick={onClose}>閉じる</button>
         </div>
 
+        {mode === "new" && (
+          <div className="segmented tabs" role="tablist" aria-label="入力の種類">
+            <button type="button" role="tab" aria-selected={tab === "event"} className={tab === "event" ? "on" : ""} onClick={() => setTab("event")}>イベント</button>
+            <button type="button" role="tab" aria-selected={tab === "session"} className={tab === "session" ? "on" : ""} onClick={() => setTab("session")}>ながら・場所セッション</button>
+          </div>
+        )}
+
+        {mode !== "session" && (
+        <div className="pane" hidden={tab !== "event"}>
         <input
           className="title-input"
           type="text"
@@ -250,12 +288,18 @@ export default function EventModal({ mode, event, range, events, settings, now, 
           )}
         </div>
 
+        <NagaraChips drafts={drafts} onChange={setDrafts} suggestions={nagaraList} eventStart={allDay ? joinLocal(startDate, "09:00") : start} eventEnd={allDay ? joinLocal(startDate, "10:00") : end} />
+
         <button type="button" className="link-btn detail-toggle" onClick={() => setShowDetail((v) => !v)} aria-expanded={showDetail}>
           {showDetail ? "詳細を閉じる" : "詳細"}
         </button>
         {showDetail && (
           <div className="detail">
-            <span className="row-label">種別</span>
+            <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：めぐちゃん" listId="people-suggestions" />
+            <ChipInput label="場所（順番あり）" values={places} onChange={setPlaces} suggestions={placeList} placeholder="例：カフェ" reorderable listId="place-suggestions" />
+            <label className="field-label" htmlFor="memo-input">メモ</label>
+            <textarea id="memo-input" className="memo-input" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <span className="field-label">種別</span>
             <div className="segmented">
               {(["plan", "actual"] as EventKind[]).concat(kind === "unknown" ? ["unknown" as EventKind] : []).map((k) => (
                 <button key={k} type="button" className={kind === k ? "on" : ""} aria-pressed={kind === k} onClick={() => setKindChoice(k)}>
@@ -275,6 +319,14 @@ export default function EventModal({ mode, event, range, events, settings, now, 
           <span className="spacer" />
           <button type="button" className="primary-btn" onClick={handleSave} disabled={!!error || busy}>保存</button>
         </div>
+        </div>
+        )}
+
+        {mode !== "edit" && (
+          <div className="pane" hidden={tab !== "session"}>
+            <SessionForm session={session} range={range} labelSuggestions={sessionLabelList} onSave={onSaveSession} onDelete={onDeleteSession} />
+          </div>
+        )}
       </div>
     </div>
   );

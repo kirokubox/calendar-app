@@ -106,3 +106,69 @@ export function formatShortDate(key: string): string {
   const d = parseDateKey(key);
   return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
 }
+
+const WEEKDAY_NAMES = WEEKDAYS;
+
+/** 0=日〜6=土 の曜日名 */
+export function weekdayName(index: number): string {
+  return WEEKDAY_NAMES[((index % 7) + 7) % 7];
+}
+
+/** 週の始まりの曜日（0=日〜6=土）に合わせた、その日を含む週の初日 */
+export function startOfWeek(key: string, weekStartDay: number): string {
+  const back = (parseDateKey(key).getDay() - weekStartDay + 7) % 7;
+  return addDays(key, -back);
+}
+
+/** その日を含む週の7日分の日付キー */
+export function weekDayKeys(key: string, weekStartDay: number): string[] {
+  const first = startOfWeek(key, weekStartDay);
+  return Array.from({ length: 7 }, (_, i) => addDays(first, i));
+}
+
+/** 月の1日 */
+export function startOfMonth(key: string): string {
+  return `${key.slice(0, 7)}-01`;
+}
+
+/** 月の末日 */
+export function endOfMonth(key: string): string {
+  return addDays(addMonths(startOfMonth(key), 1), -1);
+}
+
+/** 月を足す。移動先の月に同じ日が無ければ月末に丸める（1/31 → 2/28） */
+export function addMonths(key: string, months: number): string {
+  const d = parseDateKey(key);
+  const day = d.getDate();
+  const first = new Date(d.getFullYear(), d.getMonth() + months, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  first.setDate(Math.min(day, last));
+  return dateKeyOf(first);
+}
+
+/** 月表示のグリッド：その月にかかる週を、週の始まりに合わせて並べる（各週7日） */
+export function monthGridWeeks(key: string, weekStartDay: number): string[][] {
+  const first = startOfWeek(startOfMonth(key), weekStartDay);
+  const lastDay = endOfMonth(key);
+  const weeks: string[][] = [];
+  for (let start = first; start <= lastDay; start = addDays(start, 7)) {
+    weeks.push(Array.from({ length: 7 }, (_, i) => addDays(start, i)));
+  }
+  return weeks;
+}
+
+/** 2つの日付キーの差（b - a、日数） */
+export function diffDays(a: string, b: string): number {
+  return Math.round((parseDateKey(b).getTime() - parseDateKey(a).getTime()) / 86400000);
+}
+
+/** 例：2026年10月 */
+export function formatMonthLabel(key: string): string {
+  return `${key.slice(0, 4)}年${Number(key.slice(5, 7))}月`;
+}
+
+/** 例：10/5(月)〜10/11(日) */
+export function formatWeekRangeLabel(key: string, weekStartDay: number): string {
+  const days = weekDayKeys(key, weekStartDay);
+  return `${formatShortDate(days[0])}〜${formatShortDate(days[6])}`;
+}

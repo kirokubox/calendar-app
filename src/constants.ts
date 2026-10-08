@@ -1,4 +1,4 @@
-import type { Settings } from "./types.js";
+import type { ParentCategory, Settings } from "./types.js";
 
 export const APP_VERSION = "0.1.0";
 export const BACKUP_APP_NAME = "calendar-app";
@@ -22,10 +22,34 @@ export const COLOR_HEX: Record<string, string> = {
 };
 
 export const HOUR_HEIGHT = 56;
+/** 日表示の右端のセッションレーンの幅（px） */
+export const LANE_WIDTH = 30;
+
+export const PARENT_CATEGORIES: ParentCategory[] = ["睡眠", "生活", "仕事", "自由時間", "その他"];
+
+/** 色キー（"default" と "1"〜"11"）の一覧 */
+export const COLOR_KEYS = ["default", ...COLOR_IDS] as const;
+
+export function defaultCategoryParents(): Record<string, ParentCategory> {
+  const parents: Record<string, ParentCategory> = {};
+  for (const key of COLOR_KEYS) parents[key] = "その他";
+  parents["1"] = "睡眠";
+  parents["3"] = "生活";
+  parents["11"] = "仕事";
+  parents.default = "自由時間";
+  parents["2"] = "自由時間";
+  parents["5"] = "自由時間";
+  parents["9"] = "自由時間";
+  return parents;
+}
+
+export const DB_SCHEMA_VERSION = 2;
 
 export function defaultSettings(): Settings {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    weekStartDay: 1,
+    categoryParents: defaultCategoryParents(),
     colorLabels: {
       default: "趣味・遊び",
       "1": "睡眠",

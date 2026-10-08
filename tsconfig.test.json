@@ -18,10 +18,17 @@
     "src/dateUtils.ts",
     "src/layout.ts",
     "src/eventLogic.ts",
+    "src/migrate.ts",
+    "src/nagaraLogic.ts",
     "src/backup.ts",
     "tests/dateUtils.test.ts",
     "tests/layout.test.ts",
     "tests/eventLogic.test.ts",
-    "tests/backup.test.ts"
+    "tests/backup.test.ts",
+    "tests/migrate.test.ts",
+    "tests/nagaraLogic.test.ts",
+    "tests/viewDates.test.ts",
+    "tests/eventDisplay.test.ts",
+    "tests/backupV2.test.ts"
   ]
 }

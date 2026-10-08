@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { allDayEventsOn, clipToDay, layoutColumns, segmentsForDay } from "../src/layout.js";
+import { eventDefaults } from "../src/migrate.js";
 import type { CalendarEvent } from "../src/types.js";
 
 function ev(id: string, start: string, end: string, allDay = false): CalendarEvent {
-  return { id, title: id, start, end, allDay, colorId: null, kind: "actual", createdAt: "x", updatedAt: "x" };
+  return { id, title: id, start, end, allDay, colorId: null, kind: "actual", createdAt: "x", updatedAt: "x", ...eventDefaults() };
 }
 
 test("その日に収まるイベントはそのまま", () => {

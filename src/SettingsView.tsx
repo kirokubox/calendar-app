@@ -1,21 +1,27 @@
 import { useRef, useState } from "react";
 import { backupFileName, buildBackup, summarizeBackup, validateBackup, type BackupSummary } from "./backup";
-import { APP_VERSION, COLOR_HEX, COLOR_IDS } from "./constants";
-import { dateKeyOf } from "./dateUtils";
-import type { BackupFile, CalendarEvent, Settings } from "./types";
+import { APP_VERSION, COLOR_HEX, COLOR_IDS, PARENT_CATEGORIES } from "./constants";
+import { dateKeyOf, weekdayName } from "./dateUtils";
+import type { BackupFile, CalendarEvent, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings } from "./types";
 
 interface Props {
   settings: Settings;
   events: CalendarEvent[];
+  nagara: Nagara[];
+  revisions: PlanRevision[];
+  recurrences: RecurrenceRule[];
   onBack: () => void;
   onSaveSettings: (settings: Settings) => Promise<void>;
-  onRestore: (backup: BackupFile) => Promise<void>;
+  onRestore: (backup: BackupFile, sourceVersion: 1 | 2) => Promise<void>;
 }
 
-export default function SettingsView({ settings, events, onBack, onSaveSettings, onRestore }: Props) {
+export default function SettingsView({ settings, events, nagara, revisions, recurrences, onBack, onSaveSettings, onRestore }: Props) {
   const [labels, setLabels] = useState<Record<string, string>>({ ...settings.colorLabels });
   const [labelMessage, setLabelMessage] = useState("");
-  const [pending, setPending] = useState<{ backup: BackupFile; summary: BackupSummary; fileName: string } | null>(null);
+  const [parents, setParents] = useState<Record<string, ParentCategory>>({ ...settings.categoryParents });
+  const [parentMessage, setParentMessage] = useState("");
+  const [weekMessage, setWeekMessage] = useState("");
+  const [pending, setPending] = useState<{ backup: BackupFile; summary: BackupSummary; fileName: string; sourceVersion: 1 | 2 } | null>(null);
   const [restoreError, setRestoreError] = useState("");
   const [restoreMessage, setRestoreMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,7 +37,7 @@ export default function SettingsView({ settings, events, onBack, onSaveSettings,
     try {
       const trimmed: Record<string, string> = {};
       for (const [k, v] of Object.entries(labels)) trimmed[k] = v.trim();
-      await onSaveSettings({ schemaVersion: 1, colorLabels: trimmed });
+      await onSaveSettings({ ...settings, colorLabels: trimmed });
       setLabels(trimmed);
       setLabelMessage("保存しました");
     } catch (e) {
@@ -40,9 +46,31 @@ export default function SettingsView({ settings, events, onBack, onSaveSettings,
     setBusy(false);
   };
 
+  const saveParents = async () => {
+    setBusy(true);
+    try {
+      await onSaveSettings({ ...settings, categoryParents: parents });
+      setParentMessage("保存しました");
+    } catch (e) {
+      setParentMessage(e instanceof Error ? e.message : "保存できませんでした");
+    }
+    setBusy(false);
+  };
+
+  const changeWeekStart = async (day: number) => {
+    setBusy(true);
+    try {
+      await onSaveSettings({ ...settings, weekStartDay: day });
+      setWeekMessage("保存しました");
+    } catch (e) {
+      setWeekMessage(e instanceof Error ? e.message : "保存できませんでした");
+    }
+    setBusy(false);
+  };
+
   const exportJson = () => {
     const now = new Date();
-    const backup = buildBackup(events, settings, now.toISOString());
+    const backup = buildBackup(events, settings, now.toISOString(), { nagara, revisions, recurrences });
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -71,15 +99,16 @@ export default function SettingsView({ settings, events, onBack, onSaveSettings,
       setRestoreError(`このファイルは復元できません：${result.reason}`);
       return;
     }
-    setPending({ backup: result.backup, summary: summarizeBackup(result.backup), fileName: file.name });
+    setPending({ backup: result.backup, summary: summarizeBackup(result.backup), fileName: file.name, sourceVersion: result.sourceVersion });
   };
 
   const confirmRestore = async () => {
     if (!pending) return;
     setBusy(true);
     try {
-      await onRestore(pending.backup);
+      await onRestore(pending.backup, pending.sourceVersion);
       setLabels({ ...pending.backup.settings.colorLabels });
+      if (pending.sourceVersion === 2) setParents({ ...pending.backup.settings.categoryParents });
       setRestoreMessage(`${pending.summary.count}件を読み込みました`);
       setPending(null);
     } catch (e) {
@@ -130,8 +159,47 @@ export default function SettingsView({ settings, events, onBack, onSaveSettings,
         </section>
 
         <section>
+          <h2>親カテゴリの割り当て</h2>
+          <p className="hint">色ごとに、振り返りで使う親カテゴリ（睡眠・生活・仕事・自由時間・その他）を選びます。</p>
+          <ul className="label-list">
+            {rows.map((r) => (
+              <li key={r.key}>
+                <i className="dot" style={{ background: COLOR_HEX[r.key] }} />
+                <span className="label-name">{(labels[r.key] ?? "").trim() || r.name}</span>
+                <select
+                  value={parents[r.key] ?? "その他"}
+                  aria-label={`${r.name}の親カテゴリ`}
+                  onChange={(e) => { setParents({ ...parents, [r.key]: e.target.value as ParentCategory }); setParentMessage(""); }}
+                >
+                  {PARENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </li>
+            ))}
+          </ul>
+          <div className="inline-actions">
+            <button type="button" className="primary-btn" onClick={saveParents} disabled={busy}>親カテゴリを保存</button>
+            {parentMessage && <span className="hint">{parentMessage}</span>}
+          </div>
+        </section>
+
+        <section>
+          <h2>週の始まり</h2>
+          <div className="inline-actions">
+            <select
+              value={settings.weekStartDay}
+              aria-label="週の始まりの曜日"
+              disabled={busy}
+              onChange={(e) => changeWeekStart(Number(e.target.value))}
+            >
+              {Array.from({ length: 7 }, (_, i) => <option key={i} value={i}>{weekdayName(i)}曜日</option>)}
+            </select>
+            {weekMessage && <span className="hint">{weekMessage}</span>}
+          </div>
+        </section>
+
+        <section>
           <h2>バックアップ</h2>
-          <p className="hint">現在 {events.length} 件の予定・実績があります。</p>
+          <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所があります。</p>
           <div className="inline-actions">
             <button type="button" className="secondary-btn" onClick={exportJson}>JSONで書き出す</button>
             <label className="secondary-btn file-btn">
@@ -149,7 +217,10 @@ export default function SettingsView({ settings, events, onBack, onSaveSettings,
                 {pending.summary.from && pending.summary.to ? `（${pending.summary.from} 〜 ${pending.summary.to}）` : ""}
                 ・書き出し日時 {pending.backup.exportedAt.slice(0, 16).replace("T", " ")}
               </p>
-              <p className="hint">同じidの予定・実績は上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます。</p>
+              <p className="hint">
+                同じidの予定・実績・ながらは上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます
+                {pending.sourceVersion === 1 ? "（古い形式のバックアップなので、週の始まりと親カテゴリは今の設定のままです）" : ""}。
+              </p>
               <div className="inline-actions">
                 <button type="button" className="primary-btn" onClick={confirmRestore} disabled={busy}>この内容を読み込む</button>
                 <button type="button" className="secondary-btn" onClick={cancelRestore} disabled={busy}>やめる</button>

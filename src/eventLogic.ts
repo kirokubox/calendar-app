@@ -107,3 +107,61 @@ export function rangeForPlusButton(events: CalendarEvent[], dayKey: string, now:
   if (end <= start) end = addMinutes(start, 60);
   return { start, end };
 }
+
+/** 人を先に出したタイトル。例：めぐちゃん　散歩/外食（人の区切りは「・」、人とタイトルの間は全角スペース） */
+export function displayTitle(event: Pick<CalendarEvent, "title" | "people">): string {
+  const people = event.people.map((p) => p.trim()).filter((p) => p !== "");
+  return people.length > 0 ? `${people.join("・")}　${event.title}` : event.title;
+}
+
+/** 配列の項目を上下に入れ替える（範囲外は何もしない） */
+export function moveItem<T>(list: T[], index: number, delta: number): T[] {
+  const to = index + delta;
+  if (index < 0 || index >= list.length || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(index, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/** チップ項目の追加：前後の空白を削り、空・重複は無視 */
+export function addChipValue(list: string[], value: string): string[] {
+  const v = value.trim();
+  if (v === "" || list.includes(v)) return list;
+  return [...list, v];
+}
+
+/** 値の候補：重複除去・新しい順（更新日時の新しい順） */
+function recentValues(events: CalendarEvent[], pick: (e: CalendarEvent) => string[], limit: number): string[] {
+  const sorted = [...events].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.start.localeCompare(a.start));
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const e of sorted) {
+    for (const raw of pick(e)) {
+      const v = raw.trim();
+      if (v === "" || seen.has(v)) continue;
+      seen.add(v);
+      result.push(v);
+      if (result.length >= limit) return result;
+    }
+  }
+  return result;
+}
+
+export function peopleSuggestions(events: CalendarEvent[], limit = 100): string[] {
+  return recentValues(events, (e) => e.people, limit);
+}
+
+export function placeSuggestions(events: CalendarEvent[], limit = 100): string[] {
+  return recentValues(events, (e) => e.places, limit);
+}
+
+/** 月表示の1日ぶん：その日にかかるイベント（キャンセル除く）のうち最大 max 件と、残りの件数 */
+export function monthCellItems(events: CalendarEvent[], dayKey: string, max = 3): { shown: CalendarEvent[]; more: number } {
+  const dayStart = joinLocal(dayKey, "00:00");
+  const dayEnd = joinLocal(addDays(dayKey, 1), "00:00");
+  const hits = events
+    .filter((e) => e.status !== "cancelled" && e.start < dayEnd && e.end > dayStart)
+    .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
+  return { shown: hits.slice(0, max), more: Math.max(0, hits.length - max) };
+}

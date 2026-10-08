@@ -1,10 +1,14 @@
-import { defaultSettings } from "./constants.js";
-import type { CalendarEvent, Settings } from "./types.js";
+import { migrateEvent, migrateSettings } from "./migrate.js";
+import type { CalendarEvent, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
 
 const DB_NAME = "calendar-app";
-const DB_VERSION = 1;
+/** 1: events / settings、2: nagara / revisions / recurrences を追加し、イベントと設定を v2 へ移行 */
+const DB_VERSION = 2;
 const EVENTS = "events";
 const SETTINGS = "settings";
+const NAGARA = "nagara";
+const REVISIONS = "revisions";
+const RECURRENCES = "recurrences";
 const SETTINGS_KEY = "app";
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -12,10 +16,30 @@ function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (ev) => {
       const db = req.result;
+      const tx = req.transaction;
       if (!db.objectStoreNames.contains(EVENTS)) db.createObjectStore(EVENTS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(SETTINGS)) db.createObjectStore(SETTINGS);
+      if (!db.objectStoreNames.contains(NAGARA)) db.createObjectStore(NAGARA, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(REVISIONS)) db.createObjectStore(REVISIONS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(RECURRENCES)) db.createObjectStore(RECURRENCES, { keyPath: "id" });
+      // v1 → v2：既存イベントへ既定値を付け、設定に週の始まり・親カテゴリを足す
+      if (tx && ev.oldVersion >= 1 && ev.oldVersion < 2) {
+        const events = tx.objectStore(EVENTS);
+        const cursorReq = events.openCursor();
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor) return;
+          cursor.update(migrateEvent(cursor.value as Record<string, unknown>));
+          cursor.continue();
+        };
+        const settings = tx.objectStore(SETTINGS);
+        const getReq = settings.get(SETTINGS_KEY);
+        getReq.onsuccess = () => {
+          if (getReq.result) settings.put(migrateSettings(getReq.result), SETTINGS_KEY);
+        };
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -35,25 +59,93 @@ async function run<T>(store: string, mode: IDBTransactionMode, action: (s: IDBOb
   });
 }
 
+/** 複数ストアへの書き込み・削除を1トランザクションで行う */
+async function writeAll(ops: Array<{ store: string; put?: unknown[]; deleteKeys?: string[] }>): Promise<void> {
+  const db = await openDb();
+  const names = [...new Set(ops.map((o) => o.store))];
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(names, "readwrite");
+    for (const op of ops) {
+      const store = tx.objectStore(op.store);
+      for (const v of op.put ?? []) store.put(v);
+      for (const k of op.deleteKeys ?? []) store.delete(k);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function getAllEvents(): Promise<CalendarEvent[]> {
-  return run<CalendarEvent[]>(EVENTS, "readonly", (s) => s.getAll());
+  const raw = await run<Array<Record<string, unknown>>>(EVENTS, "readonly", (s) => s.getAll());
+  // 念のため読み込み時にも既定値を補う（移行済みなら変化しない）
+  return raw.map(migrateEvent);
+}
+
+export async function getAllNagara(): Promise<Nagara[]> {
+  return run<Nagara[]>(NAGARA, "readonly", (s) => s.getAll());
+}
+
+export async function getAllRevisions(): Promise<PlanRevision[]> {
+  return run<PlanRevision[]>(REVISIONS, "readonly", (s) => s.getAll());
+}
+
+export async function getAllRecurrences(): Promise<RecurrenceRule[]> {
+  return run<RecurrenceRule[]>(RECURRENCES, "readonly", (s) => s.getAll());
 }
 
 export async function putEvent(event: CalendarEvent): Promise<void> {
   await run<IDBValidKey>(EVENTS, "readwrite", (s) => s.put(event));
 }
 
-export async function deleteEvent(id: string): Promise<void> {
-  await run<undefined>(EVENTS, "readwrite", (s) => s.delete(id));
+/** イベントの保存と、付随するながらの追加・更新・削除を1トランザクションで */
+export async function saveEventWithNagara(event: CalendarEvent, putNagara: Nagara[], deleteNagaraIds: string[]): Promise<void> {
+  await writeAll([
+    { store: EVENTS, put: [event] },
+    { store: NAGARA, put: putNagara, deleteKeys: deleteNagaraIds },
+  ]);
 }
 
-/** 復元用：複数イベントを1トランザクションで書き込む（同じidは上書き） */
-export async function putEvents(events: CalendarEvent[]): Promise<void> {
+/** イベントの削除と、付随するながらの削除を1トランザクションで */
+export async function deleteEventWithNagara(id: string, nagaraIds: string[]): Promise<void> {
+  await writeAll([
+    { store: EVENTS, deleteKeys: [id] },
+    { store: NAGARA, deleteKeys: nagaraIds },
+  ]);
+}
+
+export async function putNagara(n: Nagara): Promise<void> {
+  await run<IDBValidKey>(NAGARA, "readwrite", (s) => s.put(n));
+}
+
+export async function deleteNagara(id: string): Promise<void> {
+  await run<undefined>(NAGARA, "readwrite", (s) => s.delete(id));
+}
+
+export async function putRevision(r: PlanRevision): Promise<void> {
+  await run<IDBValidKey>(REVISIONS, "readwrite", (s) => s.put(r));
+}
+
+export async function putRecurrence(r: RecurrenceRule): Promise<void> {
+  await run<IDBValidKey>(RECURRENCES, "readwrite", (s) => s.put(r));
+}
+
+/** 復元用：全ストアを1トランザクションで書き込む（同じidは上書き）。設定も同時に保存する */
+export async function restoreAll(data: {
+  events: CalendarEvent[];
+  nagara: Nagara[];
+  revisions: PlanRevision[];
+  recurrences: RecurrenceRule[];
+  settings: Settings;
+}): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(EVENTS, "readwrite");
-    const store = tx.objectStore(EVENTS);
-    for (const e of events) store.put(e);
+    const tx = db.transaction([EVENTS, NAGARA, REVISIONS, RECURRENCES, SETTINGS], "readwrite");
+    for (const e of data.events) tx.objectStore(EVENTS).put(e);
+    for (const n of data.nagara) tx.objectStore(NAGARA).put(n);
+    for (const r of data.revisions) tx.objectStore(REVISIONS).put(r);
+    for (const r of data.recurrences) tx.objectStore(RECURRENCES).put(r);
+    tx.objectStore(SETTINGS).put(data.settings, SETTINGS_KEY);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -61,10 +153,8 @@ export async function putEvents(events: CalendarEvent[]): Promise<void> {
 }
 
 export async function getSettings(): Promise<Settings> {
-  const stored = await run<Settings | undefined>(SETTINGS, "readonly", (s) => s.get(SETTINGS_KEY));
-  const base = defaultSettings();
-  if (!stored || typeof stored !== "object") return base;
-  return { schemaVersion: 1, colorLabels: { ...base.colorLabels, ...(stored.colorLabels ?? {}) } };
+  const stored = await run<unknown>(SETTINGS, "readonly", (s) => s.get(SETTINGS_KEY));
+  return migrateSettings(stored);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
