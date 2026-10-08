@@ -4,11 +4,15 @@ import {
   addDays, addMonths, dateKeyOf, formatDayLabel, formatMonthLabel, formatWeekRangeLabel, startOfMonth, startOfWeek, toLocal, weekDayKeys,
 } from "./dateUtils";
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
-import { allDayEventsOn, layoutColumns, segmentsForDay } from "./layout";
+import { allDayEventsOn } from "./layout";
+import {
+  applyCancel, applyUncancel, buildAsPlanned, buildRevision, generateRecurrenceEvents, isUnconfirmed, layoutDayWithPlans, linkedPlanIds,
+  revisionsOfPlan, shouldRecordRevision, unlinkActuals,
+} from "./planLogic";
 import { buildNagaraSave, layoutSessions, nagaraIdsOfEvent, nagaraLabelMap, sessionSegmentsForDay, type NagaraDraft } from "./nagaraLogic";
 import {
-  deleteEventWithNagara, deleteNagara, getAllEvents, getAllNagara, getAllRecurrences, getAllRevisions, getSettings, newId, putNagara,
-  requestPersistentStorage, restoreAll, saveEventWithNagara, saveSettings,
+  commitChanges, deleteNagara, getAllEvents, getAllNagara, getAllRecurrences, getAllRevisions, getSettings, newId, putNagara,
+  requestPersistentStorage, restoreAll, saveSettings, type Changes,
 } from "./storage";
 import EventModal, { type ModalTab } from "./EventModal";
 import EventBlock, { eventStyle } from "./EventBlock";
@@ -20,7 +24,7 @@ import type { BackupFile, CalendarEvent, Nagara, PlanRevision, RecurrenceRule, S
 
 type ViewMode = "day" | "week" | "month";
 type ModalState =
-  | { mode: "new"; range: Range; tab: ModalTab }
+  | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent }
   | { mode: "edit"; event: CalendarEvent }
   | { mode: "session"; session: Nagara }
   | null;
@@ -43,6 +47,7 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
   const laneRef = useRef<HTMLDivElement>(null);
+  const recurrenceDone = useRef(false);
 
   const nowLocal = toLocal(now);
   const todayKey = dateKeyOf(now);
@@ -61,6 +66,17 @@ export default function App() {
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "データを読み込めませんでした"));
   }, []);
+
+  // 起動時に、有効な繰り返しルールの予定を先読み分だけ生成する（1回だけ）
+  useEffect(() => {
+    if (!loaded || recurrenceDone.current) return;
+    recurrenceDone.current = true;
+    const gen = generateRecurrenceEvents(recurrences, dateKeyOf(new Date()), new Date().toISOString(), newId);
+    if (gen.events.length === 0 && gen.rules.length === 0) return;
+    const changes: Changes = { putEvents: gen.events, putRecurrences: gen.rules };
+    commitChanges(changes).then(() => applyChanges(changes)).catch(() => { recurrenceDone.current = false; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // 現在時刻（赤線）を更新。画面に戻ったときも更新
   useEffect(() => {
@@ -95,7 +111,8 @@ export default function App() {
     }
   }, [dayKey, loaded, view, viewMode, weekKeys]);
 
-  const segments = useMemo(() => layoutColumns(segmentsForDay(events, dayKey)), [events, dayKey]);
+  const linked = useMemo(() => linkedPlanIds(events), [events]);
+  const dayLayout = useMemo(() => layoutDayWithPlans(events, dayKey, linked), [events, dayKey, linked]);
   const allDayEvents = useMemo(() => allDayEventsOn(events, dayKey), [events, dayKey]);
   const sessionSegs = useMemo(() => layoutSessions(sessionSegmentsForDay(nagara, dayKey)), [nagara, dayKey]);
   const labelsByEvent = useMemo(() => nagaraLabelMap(nagara), [nagara]);
@@ -121,22 +138,72 @@ export default function App() {
     if (minutes !== null) openNew(rangeFromTap(dayKey, minutes), "session");
   };
 
+  /** 保存した変更を画面の状態へ反映する */
+  const applyChanges = (c: Changes) => {
+    const delE = new Set(c.deleteEventIds ?? []);
+    const putE = c.putEvents ?? [];
+    setEvents((prev) => [...prev.filter((e) => !delE.has(e.id) && !putE.some((p) => p.id === e.id)), ...putE]);
+    const delN = new Set(c.deleteNagaraIds ?? []);
+    const putN = c.putNagara ?? [];
+    if (delN.size > 0 || putN.length > 0) setNagara((prev) => [...prev.filter((n) => !delN.has(n.id) && !putN.some((p) => p.id === n.id)), ...putN]);
+    const delR = new Set(c.deleteRevisionIds ?? []);
+    const putR = c.putRevisions ?? [];
+    if (delR.size > 0 || putR.length > 0) setRevisions((prev) => [...prev.filter((r) => !delR.has(r.id) && !putR.some((p) => p.id === r.id)), ...putR]);
+    const putC = c.putRecurrences ?? [];
+    if (putC.length > 0) setRecurrences((prev) => [...prev.filter((r) => !putC.some((p) => p.id === r.id)), ...putC]);
+  };
+
+  const commit = async (c: Changes) => {
+    await commitChanges(c);
+    applyChanges(c);
+  };
+
   const handleSave = async (event: CalendarEvent, drafts: NagaraDraft[]) => {
     const stamp = new Date().toISOString();
     const { put, deleteIds } = buildNagaraSave(event.id, drafts, nagara, stamp, newId);
-    await saveEventWithNagara(event, put, deleteIds);
-    setEvents((prev) => [...prev.filter((e) => e.id !== event.id), event]);
-    setNagara((prev) => [...prev.filter((n) => !deleteIds.includes(n.id) && !put.some((p) => p.id === n.id)), ...put]);
+    const before = events.find((e) => e.id === event.id);
+    // 予定の内容が変わったら、変更前の状態を履歴に残す
+    const putRevisions = before && shouldRecordRevision(before, event) ? [buildRevision(before, stamp, newId)] : [];
+    await commit({ putEvents: [event], putNagara: put, deleteNagaraIds: deleteIds, putRevisions });
     setModal(null);
   };
 
-  /** イベント削除：付随するながらも一緒に削除する */
+  /** イベント削除：付随するながら・変更履歴も削除し、この予定を指していた実績の planId を外す */
   const handleDelete = async (id: string) => {
-    const ids = nagaraIdsOfEvent(nagara, id);
-    await deleteEventWithNagara(id, ids);
-    setEvents((prev) => prev.filter((e) => e.id !== id));
-    setNagara((prev) => prev.filter((n) => !ids.includes(n.id)));
+    const stamp = new Date().toISOString();
+    await commit({
+      deleteEventIds: [id],
+      deleteNagaraIds: nagaraIdsOfEvent(nagara, id),
+      deleteRevisionIds: revisions.filter((r) => r.planId === id).map((r) => r.id),
+      putEvents: unlinkActuals(events, id, stamp),
+    });
     setModal(null);
+  };
+
+  /** 予定通り：同じ内容の実績（ながらも複製）を作ってリンクする */
+  const handleAsPlanned = async (plan: CalendarEvent) => {
+    const { event, nagara: copies } = buildAsPlanned(plan, nagara, new Date().toISOString(), newId);
+    await commit({ putEvents: [event], putNagara: copies });
+    setModal(null);
+  };
+
+  /** キャンセル・取り消し：変更前の状態を履歴に残す */
+  const handleCancelPlan = async (plan: CalendarEvent, reason: string) => {
+    const stamp = new Date().toISOString();
+    await commit({ putEvents: [applyCancel(plan, reason, stamp)], putRevisions: [buildRevision(plan, stamp, newId)] });
+    setModal(null);
+  };
+
+  const handleUncancelPlan = async (plan: CalendarEvent) => {
+    const stamp = new Date().toISOString();
+    await commit({ putEvents: [applyUncancel(plan, stamp)], putRevisions: [buildRevision(plan, stamp, newId)] });
+    setModal(null);
+  };
+
+  /** 繰り返しルールの保存。有効なら、先読み分の予定もすぐ生成する */
+  const handleSaveRecurrence = async (rule: RecurrenceRule) => {
+    const gen = generateRecurrenceEvents([rule], dateKeyOf(new Date()), new Date().toISOString(), newId);
+    await commit({ putRecurrences: [gen.rules[0] ?? rule], putEvents: gen.events });
   };
 
   const handleSaveSession = async (n: Nagara) => {
@@ -194,6 +261,7 @@ export default function App() {
           recurrences={recurrences}
           onBack={() => setView("calendar")}
           onSaveSettings={handleSaveSettings}
+          onSaveRecurrence={handleSaveRecurrence}
           onRestore={handleRestore}
         />
       </div>
@@ -259,11 +327,22 @@ export default function App() {
               onClick={onAreaClick}
               style={{ backgroundSize: `100% ${HOUR_HEIGHT}px`, right: LANE_WIDTH }}
             >
-              {segments.map((seg) => (
+              {dayLayout.back.map(({ seg, variant }) => (
+                <EventBlock
+                  key={`${seg.event.id}-${dayKey}`}
+                  seg={{ ...seg, col: 0, cols: 1 }}
+                  dayKey={dayKey}
+                  variant={variant}
+                  nagaraLabels={[]}
+                  onOpen={() => setModal({ mode: "edit", event: seg.event })}
+                />
+              ))}
+              {dayLayout.front.map((seg) => (
                 <EventBlock
                   key={`${seg.event.id}-${dayKey}`}
                   seg={seg}
                   dayKey={dayKey}
+                  unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}
                   nagaraLabels={labelsByEvent.get(seg.event.id) ?? []}
                   onOpen={() => setModal({ mode: "edit", event: seg.event })}
                 />
@@ -304,6 +383,8 @@ export default function App() {
           dayKeys={weekKeys}
           events={events}
           labelsByEvent={labelsByEvent}
+          linked={linked}
+          nowLocal={nowLocal}
           todayKey={todayKey}
           nowMin={nowMin}
           scrollRef={scrollRef}
@@ -314,25 +395,33 @@ export default function App() {
       )}
 
       {viewMode === "month" && (
-        <MonthView anchor={dayKey} weekStartDay={weekStartDay} events={events} todayKey={todayKey} onOpenDay={openDay} />
+        <MonthView anchor={dayKey} weekStartDay={weekStartDay} events={events} linked={linked} todayKey={todayKey} onOpenDay={openDay} />
       )}
 
       <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}>＋</button>
 
       {modal && (
         <EventModal
-          key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : `new-${modal.range.start}`}
+          key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : `new-${modal.range.start}-${modal.template?.id ?? ""}`}
           mode={modal.mode}
           event={modal.mode === "edit" ? modal.event : null}
           session={modal.mode === "session" ? modal.session : null}
           range={modal.mode === "new" ? modal.range : null}
           initialTab={modal.mode === "new" ? modal.tab : "event"}
+          template={modal.mode === "new" ? modal.template ?? null : null}
+          revisions={modal.mode === "edit" ? revisionsOfPlan(revisions, modal.event.id) : []}
+          linkedActualCount={modal.mode === "edit" ? events.filter((e) => e.planId === modal.event.id).length : 0}
+          planOfActual={modal.mode === "edit" && modal.event.planId ? events.find((e) => e.id === modal.event.planId) ?? null : null}
           events={events}
           nagara={nagara}
           settings={settings}
           now={nowLocal}
           onSave={handleSave}
           onDelete={handleDelete}
+          onAsPlanned={handleAsPlanned}
+          onCancelPlan={handleCancelPlan}
+          onUncancelPlan={handleUncancelPlan}
+          onRecordActual={(plan) => setModal({ mode: "new", range: { start: plan.start, end: plan.end }, tab: "event", template: plan })}
           onSaveSession={handleSaveSession}
           onDeleteSession={handleDeleteSession}
           onClose={() => setModal(null)}

@@ -21,6 +21,7 @@
     "src/migrate.ts",
     "src/nagaraLogic.ts",
     "src/backup.ts",
+    "src/planLogic.ts",
     "tests/dateUtils.test.ts",
     "tests/layout.test.ts",
     "tests/eventLogic.test.ts",
@@ -29,6 +30,7 @@
     "tests/nagaraLogic.test.ts",
     "tests/viewDates.test.ts",
     "tests/eventDisplay.test.ts",
-    "tests/backupV2.test.ts"
+    "tests/backupV2.test.ts",
+    "tests/planLogic.test.ts"
   ]
 }

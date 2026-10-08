@@ -233,3 +233,41 @@ button { cursor: pointer; }
 @media (min-width: 641px) {
   .sheet { border-radius: 18px; margin-bottom: 24px; }
 }
+
+/* 予定と実績：背面表示・未確定バッジ */
+.event.back { background: transparent; z-index: 0; box-shadow: none; }
+.event:not(.back) { z-index: 1; }
+.event.back.linked { border-color: var(--c); border-style: dashed; opacity: 0.35; }
+.event.back.cancelled { border-color: var(--c); opacity: 0.3; }
+.event.back.cancelled .event-title, .event.back.cancelled .event-time { text-decoration: line-through; }
+.event.back .event-title { font-weight: 500; }
+.badge-unconfirmed {
+  display: inline-block; margin-right: 3px; padding: 0 4px; border-radius: 4px; background: #fff3cd; color: #8a5a00; border: 1px solid #f0c36d;
+  font-size: 0.6rem; font-weight: 700; vertical-align: baseline;
+}
+
+/* 入力シート：予定の操作・変更履歴 */
+.plan-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: #f0f5ff; border-radius: 10px; }
+.plan-actions .secondary-btn, .plan-actions .primary-btn { min-height: 40px; padding: 0 14px; }
+.plan-reason { display: flex; gap: 6px; width: 100%; }
+.plan-reason input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #c9d3e3; border-radius: 8px; }
+.plan-ref { margin: 0; padding: 6px 10px; border-radius: 8px; background: #f0f5ff; font-size: 0.85rem; }
+.cancel-note { margin: 0; padding: 6px 10px; border-radius: 8px; background: #f3f3f3; font-size: 0.85rem; color: #555; }
+.revisions { display: flex; flex-direction: column; gap: 6px; }
+.revision-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.revision-list li { padding: 6px 10px; background: #f6f8fc; border-radius: 8px; font-size: 0.8rem; }
+.revision-list .rev-time { font-weight: 700; display: block; }
+.revision-list .rev-diff { display: block; color: #374151; }
+
+/* 設定：繰り返し予定 */
+.rule-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rule-list li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.rule-list li.off { opacity: 0.55; }
+.rule-list .rule-main { flex: 1; min-width: 0; font-size: 0.85rem; }
+.rule-list .rule-main strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px 12px; border: 1px solid #c9d3e3; border-radius: 10px; background: #f6f8fc; }
+.rule-form input[type="text"], .rule-form input[type="date"], .rule-form input[type="time"] { padding: 6px 8px; border: 1px solid #c9d3e3; border-radius: 8px; background: #fff; font: inherit; }
+.rule-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.weekday-chips { display: flex; gap: 4px; }
+.weekday-chips button { min-width: 36px; min-height: 36px; border: 1px solid #c9d3e3; border-radius: 50%; background: #fff; }
+.weekday-chips button.on { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }

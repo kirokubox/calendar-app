@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { HOUR_HEIGHT } from "./constants";
 import { formatShortDate } from "./dateUtils";
 import { rangeFromTap, type Range } from "./eventLogic";
-import { allDayEventsOn, layoutColumns, segmentsForDay } from "./layout";
+import { allDayEventsOn } from "./layout";
+import { isUnconfirmed, layoutDayWithPlans } from "./planLogic";
 import EventBlock, { eventStyle } from "./EventBlock";
 import { displayTitle } from "./eventLogic";
 import type { CalendarEvent } from "./types";
@@ -11,6 +12,10 @@ interface Props {
   dayKeys: string[];
   events: CalendarEvent[];
   labelsByEvent: Map<string, string[]>;
+  /** 実績がリンクされた予定のid */
+  linked: Set<string>;
+  /** 現在のローカル時刻 */
+  nowLocal: string;
   todayKey: string;
   /** 現在時刻の0:00からの分 */
   nowMin: number;
@@ -21,10 +26,10 @@ interface Props {
 }
 
 /** 週表示：7日分の列＋時間軸 */
-export default function WeekView({ dayKeys, events, labelsByEvent, todayKey, nowMin, scrollRef, onOpenEvent, onCreate, onOpenDay }: Props) {
+export default function WeekView({ dayKeys, events, labelsByEvent, linked, nowLocal, todayKey, nowMin, scrollRef, onOpenEvent, onCreate, onOpenDay }: Props) {
   const columns = useMemo(
-    () => dayKeys.map((k) => ({ key: k, segments: layoutColumns(segmentsForDay(events, k)), allDay: allDayEventsOn(events, k) })),
-    [dayKeys, events],
+    () => dayKeys.map((k) => ({ key: k, layout: layoutDayWithPlans(events, k, linked), allDay: allDayEventsOn(events, k) })),
+    [dayKeys, events, linked],
   );
   const hasAllDay = columns.some((c) => c.allDay.length > 0);
 
@@ -66,11 +71,23 @@ export default function WeekView({ dayKeys, events, labelsByEvent, todayKey, now
           <div className="week-cols" style={{ backgroundSize: `100% ${HOUR_HEIGHT}px` }}>
             {columns.map((c) => (
               <div key={c.key} className={`week-col ${c.key === todayKey ? "today" : ""}`} onClick={(ev) => onColumnClick(c.key, ev)}>
-                {c.segments.map((seg) => (
+                {c.layout.back.map(({ seg, variant }) => (
+                  <EventBlock
+                    key={`${seg.event.id}-${c.key}`}
+                    seg={{ ...seg, col: 0, cols: 1 }}
+                    dayKey={c.key}
+                    compact
+                    variant={variant}
+                    nagaraLabels={[]}
+                    onOpen={() => onOpenEvent(seg.event)}
+                  />
+                ))}
+                {c.layout.front.map((seg) => (
                   <EventBlock
                     key={`${seg.event.id}-${c.key}`}
                     seg={seg}
                     dayKey={c.key}
+                    unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}
                     compact
                     nagaraLabels={labelsByEvent.get(seg.event.id) ?? []}
                     onOpen={() => onOpenEvent(seg.event)}

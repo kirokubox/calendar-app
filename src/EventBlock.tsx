@@ -3,6 +3,7 @@ import { HOUR_HEIGHT } from "./constants";
 import { addDays, parseDateKey, timePart } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
 import type { PlacedSegment } from "./layout";
+import type { PlanVariant } from "./planLogic";
 import type { CalendarEvent } from "./types";
 
 /** 日跨ぎイベントの時刻表示用の日付タグ。当日なら空、前日・翌日はその語、それ以外は M/D */
@@ -30,10 +31,14 @@ interface Props {
   nagaraLabels: string[];
   /** 週表示用：時刻を出さず小さく表示する */
   compact?: boolean;
+  /** linked＝背面に薄い枠線（実績あり）／cancelled＝背面に取り消し線 */
+  variant?: PlanVariant;
+  /** 過ぎたのに実績がない予定 */
+  unconfirmed?: boolean;
   onOpen: () => void;
 }
 
-export default function EventBlock({ seg, dayKey, nagaraLabels, compact, onOpen }: Props) {
+export default function EventBlock({ seg, dayKey, nagaraLabels, compact, variant = "normal", unconfirmed, onOpen }: Props) {
   const e = seg.event;
   const top = (seg.startMin / 60) * HOUR_HEIGHT;
   const height = Math.max(((seg.endMin - seg.startMin) / 60) * HOUR_HEIGHT - 1, 16);
@@ -44,7 +49,7 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, compact, onOpen 
   return (
     <button
       type="button"
-      className={`event ${e.kind === "plan" ? "plan" : ""} ${compact ? "compact" : ""}`}
+      className={`event ${e.kind === "plan" ? "plan" : ""} ${compact ? "compact" : ""} ${variant !== "normal" ? `back ${variant}` : ""}`}
       style={{
         ...eventStyle(e),
         top,
@@ -56,6 +61,7 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, compact, onOpen 
       title={`${title}${plus ? ` ${plus}` : ""} ${timeLabel}`}
     >
       <span className="event-title">
+        {unconfirmed && <b className="badge-unconfirmed">未確定</b>}
         {title}
         {plus && <small className="event-nagara"> {plus}</small>}
       </span>

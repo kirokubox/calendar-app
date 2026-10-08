@@ -156,12 +156,17 @@ export function placeSuggestions(events: CalendarEvent[], limit = 100): string[]
   return recentValues(events, (e) => e.places, limit);
 }
 
-/** 月表示の1日ぶん：その日にかかるイベント（キャンセル除く）のうち最大 max 件と、残りの件数 */
-export function monthCellItems(events: CalendarEvent[], dayKey: string, max = 3): { shown: CalendarEvent[]; more: number } {
+/** 月表示の1日ぶん：その日にかかるイベント（キャンセル・実績がリンクされた予定を除く）のうち最大 max 件と、残りの件数 */
+export function monthCellItems(
+  events: CalendarEvent[],
+  dayKey: string,
+  max = 3,
+  linkedPlanIds: Set<string> = new Set(),
+): { shown: CalendarEvent[]; more: number } {
   const dayStart = joinLocal(dayKey, "00:00");
   const dayEnd = joinLocal(addDays(dayKey, 1), "00:00");
   const hits = events
-    .filter((e) => e.status !== "cancelled" && e.start < dayEnd && e.end > dayStart)
+    .filter((e) => e.status !== "cancelled" && !(e.kind === "plan" && linkedPlanIds.has(e.id)) && e.start < dayEnd && e.end > dayStart)
     .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
   return { shown: hits.slice(0, max), more: Math.max(0, hits.length - max) };
 }

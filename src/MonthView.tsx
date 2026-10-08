@@ -9,12 +9,14 @@ interface Props {
   anchor: string;
   weekStartDay: number;
   events: CalendarEvent[];
+  /** 実績がリンクされた予定のid（月表示では出さない） */
+  linked: Set<string>;
   todayKey: string;
   onOpenDay: (dayKey: string) => void;
 }
 
 /** 月表示：月のグリッド。各日に色付きで最大3件＋「他n件」 */
-export default function MonthView({ anchor, weekStartDay, events, todayKey, onOpenDay }: Props) {
+export default function MonthView({ anchor, weekStartDay, events, linked, todayKey, onOpenDay }: Props) {
   const weeks = useMemo(() => monthGridWeeks(anchor, weekStartDay), [anchor, weekStartDay]);
   const month = anchor.slice(0, 7);
 
@@ -27,7 +29,7 @@ export default function MonthView({ anchor, weekStartDay, events, todayKey, onOp
       </div>
       <div className="month-grid" style={{ gridTemplateRows: `repeat(${weeks.length}, 1fr)` }}>
         {weeks.map((week) => week.map((key) => {
-          const { shown, more } = monthCellItems(events, key);
+          const { shown, more } = monthCellItems(events, key, 3, linked);
           return (
             <button
               key={key}

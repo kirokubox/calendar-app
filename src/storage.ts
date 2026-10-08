@@ -76,6 +76,26 @@ async function writeAll(ops: Array<{ store: string; put?: unknown[]; deleteKeys?
   });
 }
 
+/** 画面操作1回ぶんの変更。複数ストアをまとめて1トランザクションで書く */
+export interface Changes {
+  putEvents?: CalendarEvent[];
+  deleteEventIds?: string[];
+  putNagara?: Nagara[];
+  deleteNagaraIds?: string[];
+  putRevisions?: PlanRevision[];
+  deleteRevisionIds?: string[];
+  putRecurrences?: RecurrenceRule[];
+}
+
+export async function commitChanges(c: Changes): Promise<void> {
+  await writeAll([
+    { store: EVENTS, put: c.putEvents, deleteKeys: c.deleteEventIds },
+    { store: NAGARA, put: c.putNagara, deleteKeys: c.deleteNagaraIds },
+    { store: REVISIONS, put: c.putRevisions, deleteKeys: c.deleteRevisionIds },
+    { store: RECURRENCES, put: c.putRecurrences },
+  ]);
+}
+
 export async function getAllEvents(): Promise<CalendarEvent[]> {
   const raw = await run<Array<Record<string, unknown>>>(EVENTS, "readonly", (s) => s.getAll());
   // 念のため読み込み時にも既定値を補う（移行済みなら変化しない）

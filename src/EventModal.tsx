@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { COLOR_HEX, COLOR_IDS } from "./constants";
-import { addDays, datePart, formatShortDate, joinLocal, timePart } from "./dateUtils";
+import { addDays, datePart, formatShortDate, joinLocal, timePart, toLocal } from "./dateUtils";
 import {
   allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, peopleSuggestions, placeSuggestions, shiftEnd,
   titleSuggestions, validateEvent, type Range,
 } from "./eventLogic";
 import { eventDefaults } from "./migrate";
+import { diffSnapshots, planLabel, snapshotOf } from "./planLogic";
 import { draftsFromNagara, nagaraLabelSuggestions, validateNagaraDrafts, type NagaraDraft } from "./nagaraLogic";
 import { newId } from "./storage";
 import ChipInput from "./ChipInput";
 import NagaraChips from "./NagaraChips";
 import SessionForm from "./SessionForm";
-import type { CalendarEvent, ColorId, EventKind, Nagara, Settings } from "./types";
+import type { CalendarEvent, ColorId, EventKind, Nagara, PlanRevision, Settings } from "./types";
 
 export type ModalTab = "event" | "session";
 
@@ -22,6 +23,14 @@ interface Props {
   session: Nagara | null;
   range: Range | null;
   initialTab: ModalTab;
+  /** 予定から「実績を入力」で開いたときの元の予定（内容の初期値とリンク先） */
+  template: CalendarEvent | null;
+  /** 編集中の予定の変更履歴（新しい順） */
+  revisions: PlanRevision[];
+  /** 編集中の予定にリンクされた実績の件数 */
+  linkedActualCount: number;
+  /** 編集中の実績がリンクしている予定 */
+  planOfActual: CalendarEvent | null;
   events: CalendarEvent[];
   nagara: Nagara[];
   settings: Settings;
@@ -29,6 +38,10 @@ interface Props {
   now: string;
   onSave: (event: CalendarEvent, drafts: NagaraDraft[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onAsPlanned: (plan: CalendarEvent) => Promise<void>;
+  onCancelPlan: (plan: CalendarEvent, reason: string) => Promise<void>;
+  onUncancelPlan: (plan: CalendarEvent) => Promise<void>;
+  onRecordActual: (plan: CalendarEvent) => void;
   onSaveSession: (n: Nagara) => Promise<void>;
   onDeleteSession: (id: string) => Promise<void>;
   onClose: () => void;
@@ -37,19 +50,26 @@ interface Props {
 const KIND_LABEL: Record<EventKind, string> = { plan: "予定", actual: "実績", unknown: "不明" };
 
 export default function EventModal({
-  mode, event, session, range, initialTab, events, nagara, settings, now, onSave, onDelete, onSaveSession, onDeleteSession, onClose,
+  mode, event, session, range, initialTab, template, revisions, linkedActualCount, planOfActual, events, nagara, settings, now,
+  onSave, onDelete, onAsPlanned, onCancelPlan, onUncancelPlan, onRecordActual, onSaveSession, onDeleteSession, onClose,
 }: Props) {
   const editing = mode === "edit" && event !== null;
   const [tab, setTab] = useState<ModalTab>(mode === "session" ? "session" : initialTab);
-  const [people, setPeople] = useState<string[]>(event?.people ?? []);
-  const [places, setPlaces] = useState<string[]>(event?.places ?? []);
-  const [memo, setMemo] = useState(event?.memo ?? "");
-  const [drafts, setDrafts] = useState<NagaraDraft[]>(() => (event ? draftsFromNagara(nagara, event.id) : []));
-  const initStart = event?.start ?? range?.start ?? now;
-  const initEnd = event?.end ?? range?.end ?? now;
-  const initAllDay = event?.allDay ?? false;
+  // 編集なら元のイベント、「実績を入力」なら元の予定の内容を初期値にする
+  const src = event ?? template;
+  const [people, setPeople] = useState<string[]>(src?.people ?? []);
+  const [places, setPlaces] = useState<string[]>(src?.places ?? []);
+  const [memo, setMemo] = useState(src?.memo ?? "");
+  const [drafts, setDrafts] = useState<NagaraDraft[]>(() => {
+    if (event) return draftsFromNagara(nagara, event.id);
+    if (template) return draftsFromNagara(nagara, template.id).map((d) => ({ ...d, key: newId(), id: null }));
+    return [];
+  });
+  const initStart = src?.start ?? range?.start ?? now;
+  const initEnd = src?.end ?? range?.end ?? now;
+  const initAllDay = src?.allDay ?? false;
 
-  const [title, setTitle] = useState(event?.title ?? "");
+  const [title, setTitle] = useState(src?.title ?? "");
   const [allDay, setAllDay] = useState(initAllDay);
   const [startDate, setStartDate] = useState(datePart(initStart));
   const [startTime, setStartTime] = useState(initAllDay ? "09:00" : timePart(initStart));
@@ -60,9 +80,12 @@ export default function EventModal({
   const [endDateTouched, setEndDateTouched] = useState(
     initAllDay ? true : datePart(initEnd) !== deriveEndDate(datePart(initStart), timePart(initStart), timePart(initEnd)),
   );
-  const [colorId, setColorId] = useState<ColorId>(event?.colorId ?? null);
+  const [colorId, setColorId] = useState<ColorId>(src?.colorId ?? null);
   const [colorTouched, setColorTouched] = useState(false);
-  const [kindChoice, setKindChoice] = useState<EventKind | null>(editing ? event.kind : null);
+  const [kindChoice, setKindChoice] = useState<EventKind | null>(editing ? event.kind : template ? "actual" : null);
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [showRevisions, setShowRevisions] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showOtherColors, setShowOtherColors] = useState(
     () => event?.colorId != null && !(settings.colorLabels[event.colorId] ?? "").trim(),
@@ -164,6 +187,7 @@ export default function EventModal({
       kind,
       createdAt: event?.createdAt ?? stamp,
       updatedAt: stamp,
+      planId: event ? event.planId : template?.id ?? null,
     };
     try {
       await onSave(next, drafts);
@@ -184,6 +208,23 @@ export default function EventModal({
       setBusy(false);
     }
   };
+
+  /** 予定の操作（予定通り・キャンセル・取り消し）を実行する */
+  const runPlanAction = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setSaveError("");
+    try {
+      await action();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "操作できませんでした");
+      setBusy(false);
+    }
+  };
+
+  const isPlan = editing && event.kind === "plan";
+  const refPlan = editing ? planOfActual : template;
+  const currentSnapshot = event ? snapshotOf(event) : null;
 
   const labelOf = (id: string) => (settings.colorLabels[id] ?? "").trim();
   const defaultLabel = (settings.colorLabels.default ?? "").trim() || "色なし";
@@ -223,6 +264,29 @@ export default function EventModal({
 
         {mode !== "session" && (
         <div className="pane" hidden={tab !== "event"}>
+        {isPlan && event.status === "cancelled" && (
+          <>
+            <p className="cancel-note">この予定はキャンセルされています{event.cancelReason ? `（理由：${event.cancelReason}）` : ""}</p>
+            <div className="plan-actions">
+              <button type="button" className="secondary-btn" disabled={busy} onClick={() => runPlanAction(() => onUncancelPlan(event))}>キャンセルを取り消す</button>
+            </div>
+          </>
+        )}
+        {isPlan && event.status === "active" && (
+          <div className="plan-actions">
+            <button type="button" className="primary-btn" disabled={busy} onClick={() => runPlanAction(() => onAsPlanned(event))}>予定通り</button>
+            <button type="button" className="secondary-btn" disabled={busy} onClick={() => onRecordActual(event)}>実績を入力</button>
+            <button type="button" className="secondary-btn" disabled={busy} onClick={() => setShowCancel((v) => !v)} aria-expanded={showCancel}>キャンセル</button>
+            {showCancel && (
+              <div className="plan-reason">
+                <input type="text" placeholder="理由（任意）" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} aria-label="キャンセルの理由" />
+                <button type="button" className="danger-btn" disabled={busy} onClick={() => runPlanAction(() => onCancelPlan(event, cancelReason))}>キャンセルする</button>
+              </div>
+            )}
+            {linkedActualCount > 0 && <span className="hint">この予定に実績が {linkedActualCount} 件あります</span>}
+          </div>
+        )}
+        {refPlan && <p className="plan-ref">予定：{planLabel(refPlan)}</p>}
         <input
           className="title-input"
           type="text"
@@ -308,6 +372,32 @@ export default function EventModal({
               ))}
             </div>
             {autoJudged && <p className="hint">時刻から自動判定しています</p>}
+          </div>
+        )}
+
+        {isPlan && currentSnapshot && (
+          <div className="revisions">
+            <button type="button" className="link-btn" onClick={() => setShowRevisions((v) => !v)} aria-expanded={showRevisions}>
+              変更履歴({revisions.length})
+            </button>
+            {showRevisions && (
+              revisions.length === 0 ? <p className="hint">変更の履歴はまだありません</p> : (
+                <ul className="revision-list">
+                  {revisions.map((r) => {
+                    const diffs = diffSnapshots(r.snapshot, currentSnapshot);
+                    return (
+                      <li key={r.id}>
+                        <span className="rev-time">{toLocal(new Date(r.changedAt)).replace("T", " ")} に変更</span>
+                        <span className="rev-diff">変更前：{r.snapshot.title} {r.snapshot.allDay ? "終日" : `${r.snapshot.start.slice(5, 16).replace("T", " ")}〜${r.snapshot.end.slice(5, 16).replace("T", " ")}`}</span>
+                        {diffs.length === 0 ? <span className="rev-diff">現在と同じ内容です</span> : diffs.map((d) => (
+                          <span className="rev-diff" key={d.field}>・{d.label}：{d.before} → {d.after}</span>
+                        ))}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )
+            )}
           </div>
         )}
 
