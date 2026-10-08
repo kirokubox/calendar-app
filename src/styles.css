@@ -213,8 +213,6 @@ button { cursor: pointer; }
 .week-col { position: relative; border-left: 1px solid var(--line); touch-action: manipulation; min-width: 0; }
 .week-col.today { background: rgba(66, 133, 244, 0.05); }
 .week-events { position: absolute; inset: 0; }
-.week-session-lane { position: absolute; right: 0; top: 0; bottom: 0; border-left: 1px dashed #c5ccd8; background: rgba(255,255,255,0.6); }
-.week-session { position: absolute; border: 0; padding: 0; min-width: 2px; border-radius: 2px; }
 .event.compact { padding: 0 2px; border-width: 1px; border-radius: 4px; }
 .event.compact .event-title { font-size: 0.65rem; }
 

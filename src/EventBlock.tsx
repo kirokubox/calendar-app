@@ -31,6 +31,8 @@ interface Props {
   nagaraLabels: string[];
   /** 週表示用：時刻を出さず小さく表示する */
   compact?: boolean;
+  /** 1時間あたりの表示高さ。日表示と週表示で縮尺が異なる */
+  hourHeight?: number;
   /** linked＝背面に薄い枠線（実績あり）／cancelled＝背面に取り消し線 */
   variant?: PlanVariant;
   /** 過ぎたのに実績がない予定 */
@@ -38,10 +40,10 @@ interface Props {
   onOpen: () => void;
 }
 
-export default function EventBlock({ seg, dayKey, nagaraLabels, compact, variant = "normal", unconfirmed, onOpen }: Props) {
+export default function EventBlock({ seg, dayKey, nagaraLabels, compact, hourHeight = HOUR_HEIGHT, variant = "normal", unconfirmed, onOpen }: Props) {
   const e = seg.event;
-  const top = (seg.startMin / 60) * HOUR_HEIGHT;
-  const height = Math.max(((seg.endMin - seg.startMin) / 60) * HOUR_HEIGHT - 1, 16);
+  const top = (seg.startMin / 60) * hourHeight;
+  const height = Math.max(((seg.endMin - seg.startMin) / 60) * hourHeight - 1, 16);
   const showTime = !compact && height >= 34;
   const timeLabel = `${timePart(e.start)}${dayTag(e.start, dayKey)}–${timePart(e.end)}${dayTag(e.end, dayKey)}`;
   const title = displayTitle(e);

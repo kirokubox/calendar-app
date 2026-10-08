@@ -1,19 +1,17 @@
 import { useMemo } from "react";
-import { WEEK_HOUR_HEIGHT, WEEK_LANE_WIDTH } from "./constants";
+import { WEEK_HOUR_HEIGHT } from "./constants";
 import { parseDateKey, weekdayName } from "./dateUtils";
 import { rangeFromTap, type Range } from "./eventLogic";
 import { allDayEventsOn } from "./layout";
 import { isUnconfirmed, layoutDayWithPlans } from "./planLogic";
 import EventBlock, { eventStyle } from "./EventBlock";
 import { displayTitle } from "./eventLogic";
-import { layoutSessions, sessionSegmentsForDay } from "./nagaraLogic";
-import type { CalendarEvent, Nagara } from "./types";
+import type { CalendarEvent } from "./types";
 
 interface Props {
   dayKeys: string[];
   events: CalendarEvent[];
   labelsByEvent: Map<string, string[]>;
-  nagara: Nagara[];
   /** 実績がリンクされた予定のid */
   linked: Set<string>;
   /** 現在のローカル時刻 */
@@ -25,28 +23,17 @@ interface Props {
   onOpenEvent: (event: CalendarEvent) => void;
   onCreate: (range: Range) => void;
   onOpenDay: (dayKey: string) => void;
-  onOpenSession: (session: Nagara) => void;
-}
-
-const SESSION_COLORS = ["#00897b", "#5e35b1", "#039be5", "#c62828", "#6d4c41", "#7cb342"];
-
-function sessionColor(n: Nagara): string {
-  if (n.type === "place") return "#ef6c00";
-  let hash = 0;
-  for (const ch of n.label) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return SESSION_COLORS[hash % SESSION_COLORS.length];
 }
 
 /** 週表示：7日分の列＋時間軸 */
-export default function WeekView({ dayKeys, events, labelsByEvent, nagara, linked, nowLocal, todayKey, nowMin, scrollRef, onOpenEvent, onCreate, onOpenDay, onOpenSession }: Props) {
+export default function WeekView({ dayKeys, events, labelsByEvent, linked, nowLocal, todayKey, nowMin, scrollRef, onOpenEvent, onCreate, onOpenDay }: Props) {
   const columns = useMemo(
     () => dayKeys.map((k) => ({
       key: k,
       layout: layoutDayWithPlans(events, k, linked),
       allDay: allDayEventsOn(events, k),
-      sessions: layoutSessions(sessionSegmentsForDay(nagara, k)),
     })),
-    [dayKeys, events, linked, nagara],
+    [dayKeys, events, linked],
   );
   const hasAllDay = columns.some((c) => c.allDay.length > 0);
 
@@ -88,13 +75,14 @@ export default function WeekView({ dayKeys, events, labelsByEvent, nagara, linke
           <div className="week-cols" style={{ backgroundSize: `100% ${WEEK_HOUR_HEIGHT}px` }}>
             {columns.map((c) => (
               <div key={c.key} className={`week-col ${c.key === todayKey ? "today" : ""}`} onClick={(ev) => onColumnClick(c.key, ev)}>
-                <div className="week-events" style={{ right: WEEK_LANE_WIDTH }}>
+                <div className="week-events">
                 {c.layout.back.map(({ seg, variant }) => (
                   <EventBlock
                     key={`${seg.event.id}-${c.key}`}
                     seg={{ ...seg, col: 0, cols: 1 }}
                     dayKey={c.key}
                     compact
+                    hourHeight={WEEK_HOUR_HEIGHT}
                     variant={variant}
                     nagaraLabels={[]}
                     onOpen={() => onOpenEvent(seg.event)}
@@ -107,30 +95,12 @@ export default function WeekView({ dayKeys, events, labelsByEvent, nagara, linke
                     dayKey={c.key}
                     unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}
                     compact
+                    hourHeight={WEEK_HOUR_HEIGHT}
                     nagaraLabels={labelsByEvent.get(seg.event.id) ?? []}
                     onOpen={() => onOpenEvent(seg.event)}
                   />
                 ))}
                 {c.key === todayKey && <div className="now-line" style={{ top: (nowMin / 60) * WEEK_HOUR_HEIGHT }}><i /></div>}
-                </div>
-                <div className="week-session-lane" style={{ width: WEEK_LANE_WIDTH }} aria-label={`${c.key}のセッション帯`}>
-                  {c.sessions.map((s) => (
-                    <button
-                      key={`${s.nagara.id}-${c.key}`}
-                      type="button"
-                      className="week-session"
-                      style={{
-                        top: (s.startMin / 60) * WEEK_HOUR_HEIGHT,
-                        height: Math.max(((s.endMin - s.startMin) / 60) * WEEK_HOUR_HEIGHT, 4),
-                        left: `${(s.col / s.cols) * 100}%`,
-                        width: `${100 / s.cols}%`,
-                        background: sessionColor(s.nagara),
-                      }}
-                      aria-label={`${s.nagara.type === "place" ? "場所" : "ながら"}：${s.nagara.label}`}
-                      title={s.nagara.label}
-                      onClick={(ev) => { ev.stopPropagation(); onOpenSession(s.nagara); }}
-                    />
-                  ))}
                 </div>
               </div>
             ))}

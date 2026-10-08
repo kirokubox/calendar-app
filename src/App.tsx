@@ -474,7 +474,6 @@ export default function App() {
           dayKeys={weekKeys}
           events={events}
           labelsByEvent={labelsByEvent}
-          nagara={nagara}
           linked={linked}
           nowLocal={nowLocal}
           todayKey={todayKey}
@@ -483,7 +482,6 @@ export default function App() {
           onOpenEvent={(e) => setModal({ mode: "edit", event: e })}
           onCreate={(range) => openNew(range)}
           onOpenDay={openDay}
-          onOpenSession={(session) => setModal({ mode: "session", session })}
         />
       )}
 
