@@ -2,7 +2,7 @@
 import { addDays, datePart, formatShortDate, minutesToTime } from "./dateUtils.js";
 import { clipRangeToDay } from "./layout.js";
 import {
-  buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, colorKeyOf, computeReview, formatDuration, formatPercent, formatSigned, localFromIso,
+  buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, colorKeyOf, computeReview, equivalentPreviousCutoff, formatDuration, formatPercent, formatSigned, localFromIso, periodCutoff,
   overlapsPeriod, parentOf, periodDays, periodLabel, planChangesInPeriod, shiftPeriod, unconfirmedInPeriod, type Period,
 } from "./reviewLogic.js";
 import { displayTitle } from "./eventLogic.js";
@@ -47,8 +47,9 @@ export interface MarkdownInput {
 export function buildReviewMarkdown(input: MarkdownInput): string {
   const { events, nagara, revisions, settings, period, nowLocal } = input;
   const prevPeriod = shiftPeriod(period, -1);
-  const cur = computeReview(events, nagara, period, true);
-  const prev = computeReview(events, nagara, prevPeriod, false);
+  const cutoff = periodCutoff(period, nowLocal);
+  const cur = computeReview(events, nagara, period, true, cutoff);
+  const prev = computeReview(events, nagara, prevPeriod, false, equivalentPreviousCutoff(period, prevPeriod, nowLocal));
   const total = cur.periodMinutes;
   const lastDay = addDays(period.end, -1);
   const out: string[] = [];
@@ -62,7 +63,7 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
   out.push("  - Googleカレンダーから取り込んだイベントは種別「不明」だが、実績と同じく集計に含める");
   out.push("  - 期間の境目と日付の境目（0時）で切る。睡眠など日跨ぎは、それぞれの日に数える");
   out.push("  - 主行動が重なった時間は、同時にある件数で等分する（二重計上しない）");
-  out.push("  - 記録のない時間は「未記録」。合計は期間の長さに一致する" + (period.end > nowLocal.slice(0, 10) ? "（今日以降の分も未記録に含まれる）" : ""));
+  out.push("  - 記録のない経過時間は「未記録」。現在の期間は未来を除き、現在時刻までを分母にする");
   out.push("  - ながら・場所は主行動とは別の並行集計で、時間構成の合計には含めない");
   out.push("  - 数値は事実の記録であり、良し悪しの評価は含まない");
   out.push("");

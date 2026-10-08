@@ -72,6 +72,7 @@ export function buildAsPlanned(
     people: [...plan.people],
     places: [...plan.places],
     memo: plan.memo,
+    subcategory: plan.subcategory,
     planId: plan.id,
   };
   const nagara = planNagara
@@ -84,12 +85,12 @@ export function buildAsPlanned(
 export function snapshotOf(e: CalendarEvent): PlanSnapshot {
   return {
     title: e.title, start: e.start, end: e.end, allDay: e.allDay, colorId: e.colorId,
-    people: [...e.people], places: [...e.places], memo: e.memo, status: e.status, cancelReason: e.cancelReason,
+    people: [...e.people], places: [...e.places], memo: e.memo, subcategory: e.subcategory, status: e.status, cancelReason: e.cancelReason,
   };
 }
 
 export const SNAPSHOT_LABELS: Record<keyof PlanSnapshot, string> = {
-  title: "タイトル", start: "開始", end: "終了", allDay: "終日", colorId: "色", people: "人", places: "場所", memo: "メモ", status: "状態", cancelReason: "キャンセル理由",
+  title: "タイトル", start: "開始", end: "終了", allDay: "終日", colorId: "色", people: "人", places: "場所", memo: "メモ", subcategory: "区分", status: "状態", cancelReason: "キャンセル理由",
 };
 
 function same(a: unknown, b: unknown): boolean {
@@ -209,6 +210,88 @@ export function generateRecurrenceEvents(
     if (added.length > 0) changed.push({ ...rule, generatedDates: [...rule.generatedDates, ...added] });
   }
   return { events, rules: changed };
+}
+
+function occurrenceRange(rule: RecurrenceRule, day: string): { start: string; end: string } {
+  const endDay = rule.endTime === rule.startTime ? addDays(day, 1) : deriveEndDate(day, rule.startTime, rule.endTime);
+  return { start: joinLocal(day, rule.startTime), end: joinLocal(endDay, rule.endTime) };
+}
+
+function ruleIncludesDate(rule: RecurrenceRule, day: string): boolean {
+  return rule.active
+    && day >= rule.startDate
+    && (rule.endDate === null || day <= rule.endDate)
+    && rule.weekdays.includes(parseDateKey(day).getDay());
+}
+
+/**
+ * ルール編集を未来の未確定な予定へ反映する。
+ * 自動生成後に手編集された予定（updatedAt !== createdAt）、実績リンク済み、キャンセル済みは保護する。
+ * generatedDates にあるのに予定がない日は、本人が削除した日として再生成しない。
+ */
+export function reconcileRecurrenceRule(
+  oldRule: RecurrenceRule | undefined,
+  nextRule: RecurrenceRule,
+  events: CalendarEvent[],
+  today: string,
+  stamp: string,
+  newId: () => string,
+  horizonDays = RECURRENCE_HORIZON_DAYS,
+): { rule: RecurrenceRule; putEvents: CalendarEvent[]; deleteEventIds: string[] } {
+  const linked = linkedPlanIds(events);
+  const own = events.filter((e) => e.recurrenceId === nextRule.id && e.recurrenceDate !== null);
+  const byDate = new Map(own.map((e) => [e.recurrenceDate!, e]));
+  const done = new Set(oldRule?.generatedDates ?? nextRule.generatedDates);
+  const putEvents: CalendarEvent[] = [];
+  const deleteEventIds: string[] = [];
+
+  for (const e of own) {
+    const day = e.recurrenceDate!;
+    if (day < today) continue;
+    const protectedOccurrence = e.status === "cancelled" || linked.has(e.id) || e.updatedAt !== e.createdAt;
+    if (protectedOccurrence) continue;
+    if (!ruleIncludesDate(nextRule, day)) {
+      deleteEventIds.push(e.id);
+      continue;
+    }
+    const range = occurrenceRange(nextRule, day);
+    putEvents.push({
+      ...e,
+      title: nextRule.title,
+      colorId: nextRule.colorId,
+      start: range.start,
+      end: range.end,
+      updatedAt: stamp,
+      // ルール反映は手編集ではない。次回も自動更新できるよう生成日時と揃える。
+      createdAt: stamp,
+    });
+  }
+
+  for (let i = 0; i <= horizonDays; i++) {
+    const day = addDays(today, i);
+    if (!ruleIncludesDate(nextRule, day) || byDate.has(day) || done.has(day)) continue;
+    const range = occurrenceRange(nextRule, day);
+    putEvents.push({
+      ...eventDefaults(),
+      id: newId(), title: nextRule.title, start: range.start, end: range.end, allDay: false,
+      colorId: nextRule.colorId, kind: "plan", createdAt: stamp, updatedAt: stamp,
+      recurrenceId: nextRule.id, recurrenceDate: day,
+    });
+    done.add(day);
+  }
+
+  // 既存の生成済み日を保持することで、削除済みの予定を復活させない。
+  for (const e of own) done.add(e.recurrenceDate!);
+  return { rule: { ...nextRule, generatedDates: [...done].sort() }, putEvents, deleteEventIds };
+}
+
+/** ルール削除時に一緒に消してよい、未来の未編集・未確定予定 */
+export function removableFutureOccurrences(ruleId: string, events: CalendarEvent[], today: string): string[] {
+  const linked = linkedPlanIds(events);
+  return events
+    .filter((e) => e.recurrenceId === ruleId && e.recurrenceDate !== null && e.recurrenceDate >= today)
+    .filter((e) => e.status === "active" && !linked.has(e.id) && e.updatedAt === e.createdAt)
+    .map((e) => e.id);
 }
 
 /** ルール入力の検証。問題なければ null */

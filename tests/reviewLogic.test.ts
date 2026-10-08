@@ -4,7 +4,8 @@ import { defaultSettings } from "../src/constants.js";
 import { eventDefaults } from "../src/migrate.js";
 import {
   barSeries, barTargetId, buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, computeReview, formatDuration, formatShare, formatSigned,
-  overlapsPeriod, parseBarTarget, periodDays, periodFileName, periodOf, planChangesInPeriod, shiftPeriod, unconfirmedInPeriod,
+  equivalentPreviousCutoff, overlapsPeriod, parseBarTarget, periodCutoff, periodDays, periodFileName, periodOf, planChangesInPeriod,
+  shiftPeriod, stackedBarSeries, unconfirmedInPeriod,
 } from "../src/reviewLogic.js";
 import type { CalendarEvent, Nagara, PlanRevision } from "../src/types.js";
 
@@ -240,4 +241,29 @@ test("性能：3,300件の月集計が一瞬で終わり、合計が期間の長
   assert.ok(Date.now() - started < 2000);
   const sum = Object.values(s.byColor).reduce((x, y) => x + y, 0) + s.unrecorded;
   assert.ok(Math.abs(sum - s.periodMinutes) < 1e-6);
+});
+
+test("現在期間：未来を未記録へ含めず、前期間も同じ経過時間まで比較", () => {
+  const cutoff = periodCutoff(WEEK, "2026-10-08T20:00");
+  const s = computeReview([], [], WEEK, true, cutoff);
+  assert.equal(s.periodMinutes, 3 * 1440 + 20 * 60);
+  assert.equal(s.unrecorded, s.periodMinutes);
+  const prev = shiftPeriod(WEEK, -1);
+  assert.equal(equivalentPreviousCutoff(WEEK, prev, "2026-10-08T20:00"), "2026-10-01T20:00");
+});
+
+test("新規アプリ記録だけ区分化し、仕事は定時2区間と残業へ分割する", () => {
+  const events = [
+    ev("work", "仕事", "2026-10-06T08:30", "2026-10-06T18:00", { colorId: "11", source: "app" }),
+    ev("nap", "仮眠", "2026-10-07T13:00", "2026-10-07T13:30", { colorId: "1", source: "app" }),
+    ev("past", "通勤/仮眠", "2026-10-08T07:00", "2026-10-08T08:00", { colorId: "3", source: "google" }),
+  ];
+  const s = computeReview(events, [], WEEK);
+  const details = Object.fromEntries(Object.entries(s.byDetail).map(([k, v]) => [k.split("\0")[1], v]));
+  assert.equal(details["定時"], 8 * 60 - 15);
+  assert.equal(details["残業"], 105);
+  assert.equal(details["仮眠"], 30);
+  assert.equal(details[""], 60, "Google過去データは再分類しない");
+  const stacks = stackedBarSeries(s, { type: "parent", name: "仕事" }, settings);
+  assert.deepEqual(stacks[1].segments.map((x) => x.label).sort(), ["定時", "残業"]);
 });

@@ -47,10 +47,10 @@ test("週のMarkdown：5ブロックの構成・エスケープ・主行動な�
   assert.equal(detail[0].replace(/\\\|/g, "").split("|").length, 10, "8列＋両端");
 });
 
-test("月のMarkdown：日数ぶんの見出しと、未来を含む期間の注記", () => {
+test("月のMarkdown：日数ぶんの見出しと、未来を分母へ含めない注記", () => {
   const period = periodOf("month", "2026-10-08", 1);
   const md = buildReviewMarkdown({ events: [], nagara: [], revisions: [], settings: defaultSettings(), period, nowLocal: "2026-10-08T09:00" });
   assert.equal(md.split("\n").filter((l) => l.startsWith("### 2026-10-")).length, 31);
-  assert.ok(md.includes("今日以降の分も未記録"));
+  assert.ok(md.includes("現在時刻までを分母"));
   assert.ok(md.includes("# カレンダー 月次レポート"));
 });

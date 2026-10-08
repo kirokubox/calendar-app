@@ -29,6 +29,9 @@ button { cursor: pointer; }
   padding-top: env(safe-area-inset-top);
   box-shadow: 0 0 0 1px var(--line);
 }
+.calendar-swipe-area { flex: 1; min-height: 0; display: flex; flex-direction: column; touch-action: pan-y; }
+.calendar-swipe-area > .scroll, .calendar-swipe-area > .month { flex: 1; }
+.danger-btn.small { min-height: 36px; padding: 0 10px; }
 
 /* ヘッダー */
 .topbar { border-bottom: 1px solid var(--line); background: var(--bg); flex: none; }
@@ -94,6 +97,7 @@ button { cursor: pointer; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-head h2 { margin: 0; font-size: 1.05rem; }
 .title-input { width: 100%; font-size: 1.15rem; padding: 10px 12px; border: 1px solid #c9d3e3; border-radius: 10px; }
+.title-input.compact-input { font-size: 0.9rem; padding: 8px 10px; }
 .title-input:focus, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .check-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .check-row input { width: 20px; height: 20px; }
@@ -195,6 +199,8 @@ button { cursor: pointer; }
 .week-head { display: grid; grid-template-columns: var(--gutter) repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--line); flex: none; }
 .week-gutter { display: block; }
 .week-day-head { border: 0; background: transparent; min-height: 36px; font-size: 0.7rem; font-weight: 600; padding: 0; border-left: 1px solid var(--line); }
+.week-day-head span, .week-day-head small { display: block; line-height: 1.15; }
+.week-day-head small { font-size: 0.58rem; font-weight: 500; }
 .week-day-head.today { color: #fff; background: var(--accent); }
 .week-allday .week-gutter { padding-top: 4px; }
 .week-allday-cell { display: flex; flex-direction: column; gap: 2px; padding: 2px; border-left: 1px solid var(--line); min-width: 0; }
@@ -206,8 +212,23 @@ button { cursor: pointer; }
 }
 .week-col { position: relative; border-left: 1px solid var(--line); touch-action: manipulation; min-width: 0; }
 .week-col.today { background: rgba(66, 133, 244, 0.05); }
+.week-events { position: absolute; inset: 0; }
+.week-session-lane { position: absolute; right: 0; top: 0; bottom: 0; border-left: 1px dashed #c5ccd8; background: rgba(255,255,255,0.6); }
+.week-session { position: absolute; border: 0; padding: 0; min-width: 2px; border-radius: 2px; }
 .event.compact { padding: 0 2px; border-width: 1px; border-radius: 4px; }
 .event.compact .event-title { font-size: 0.65rem; }
+
+@media (max-width: 400px) {
+  :root { --gutter: 38px; }
+  .topbar-row { gap: 0; padding: 4px; }
+  .topbar-row .icon-btn, .topbar-row .text-btn { min-width: 36px; min-height: 40px; padding: 0 3px; }
+  .date-jump { min-height: 40px; padding: 0 2px; }
+  .date-label { font-size: 1.1rem; }
+  .date-label.small { font-size: 0.82rem; }
+  .week-head { grid-template-columns: var(--gutter) repeat(7, minmax(0, 1fr)); }
+  .week-day-head { font-size: 0.64rem; }
+  .event.compact .event-title { font-size: 0.58rem; }
+}
 
 /* 月表示 */
 .month { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -225,6 +246,10 @@ button { cursor: pointer; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .month-more { font-size: 0.62rem; color: var(--muted); padding: 0 3px; }
+.stack-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: 0.72rem; color: var(--muted); }
+.stack-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.stack-legend i { width: 9px; height: 9px; border-radius: 2px; }
+.nagara-trend { margin-top: 10px; }
 
 /* 設定のセレクト */
 .settings-body select, .label-list select { padding: 8px 10px; border: 1px solid #c9d3e3; border-radius: 8px; background: #fff; font: inherit; }

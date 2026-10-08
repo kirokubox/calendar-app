@@ -19,10 +19,10 @@ function strOrNull(v: unknown): string | null {
 /** v2で追加した項目の既定値 */
 export function eventDefaults(): Pick<
   CalendarEvent,
-  "people" | "places" | "memo" | "planId" | "status" | "cancelReason" | "recurrenceId" | "recurrenceDate" | "source" | "googleEventId" | "original" | "importedAt"
+  "people" | "places" | "memo" | "subcategory" | "planId" | "status" | "cancelReason" | "recurrenceId" | "recurrenceDate" | "source" | "googleEventId" | "original" | "importedAt"
 > {
   return {
-    people: [], places: [], memo: "", planId: null, status: "active", cancelReason: "",
+    people: [], places: [], memo: "", subcategory: null, planId: null, status: "active", cancelReason: "",
     recurrenceId: null, recurrenceDate: null, source: "app", googleEventId: null, original: null, importedAt: null,
   };
 }
@@ -43,6 +43,7 @@ export function migrateEvent(raw: Rec): CalendarEvent {
     people: strArray(raw.people),
     places: strArray(raw.places),
     memo: typeof raw.memo === "string" ? raw.memo : d.memo,
+    subcategory: strOrNull(raw.subcategory),
     planId: strOrNull(raw.planId),
     status: raw.status === "cancelled" ? "cancelled" : "active",
     cancelReason: typeof raw.cancelReason === "string" ? raw.cancelReason : d.cancelReason,

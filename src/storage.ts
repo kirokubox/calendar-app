@@ -85,6 +85,7 @@ export interface Changes {
   putRevisions?: PlanRevision[];
   deleteRevisionIds?: string[];
   putRecurrences?: RecurrenceRule[];
+  deleteRecurrenceIds?: string[];
 }
 
 export async function commitChanges(c: Changes): Promise<void> {
@@ -92,7 +93,7 @@ export async function commitChanges(c: Changes): Promise<void> {
     { store: EVENTS, put: c.putEvents, deleteKeys: c.deleteEventIds },
     { store: NAGARA, put: c.putNagara, deleteKeys: c.deleteNagaraIds },
     { store: REVISIONS, put: c.putRevisions, deleteKeys: c.deleteRevisionIds },
-    { store: RECURRENCES, put: c.putRecurrences },
+    { store: RECURRENCES, put: c.putRecurrences, deleteKeys: c.deleteRecurrenceIds },
   ]);
 }
 

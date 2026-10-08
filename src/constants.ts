@@ -1,6 +1,6 @@
 import type { ParentCategory, Settings } from "./types.js";
 
-export const APP_VERSION = "0.1.0";
+export const APP_VERSION = "0.2.0";
 export const BACKUP_APP_NAME = "calendar-app";
 
 export const COLOR_IDS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"] as const;
@@ -22,6 +22,10 @@ export const COLOR_HEX: Record<string, string> = {
 };
 
 export const HOUR_HEIGHT = 56;
+/** 週表示は7日と約16時間をスマホ1画面で見渡せる密度にする */
+export const WEEK_HOUR_HEIGHT = 40;
+/** 週表示の各日右端に置くセッション帯 */
+export const WEEK_LANE_WIDTH = 8;
 /** 日表示の右端のセッションレーンの幅（px） */
 export const LANE_WIDTH = 30;
 

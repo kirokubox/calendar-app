@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { HOUR_HEIGHT, LANE_WIDTH, defaultSettings } from "./constants";
+import { HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
 import {
   addDays, addMonths, dateKeyOf, formatDayLabel, formatMonthLabel, formatWeekRangeLabel, startOfMonth, startOfWeek, toLocal, weekDayKeys,
 } from "./dateUtils";
@@ -7,7 +7,7 @@ import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./ev
 import { allDayEventsOn } from "./layout";
 import {
   applyCancel, applyUncancel, buildAsPlanned, buildRevision, generateRecurrenceEvents, isUnconfirmed, layoutDayWithPlans, linkedPlanIds,
-  revisionsOfPlan, shouldRecordRevision, unlinkActuals,
+  reconcileRecurrenceRule, removableFutureOccurrences, revisionsOfPlan, shouldRecordRevision, unlinkActuals,
 } from "./planLogic";
 import { buildNagaraSave, layoutSessions, nagaraIdsOfEvent, nagaraLabelMap, sessionSegmentsForDay, type NagaraDraft } from "./nagaraLogic";
 import {
@@ -52,6 +52,7 @@ export default function App() {
   const areaRef = useRef<HTMLDivElement>(null);
   const laneRef = useRef<HTMLDivElement>(null);
   const recurrenceDone = useRef(false);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const nowLocal = toLocal(now);
   const todayKey = dateKeyOf(now);
@@ -108,10 +109,11 @@ export default function App() {
     const includesToday = viewMode === "day" ? dayKey === today : weekKeys.includes(today);
     if (includesToday) {
       const n = new Date();
-      const y = ((n.getHours() * 60 + n.getMinutes()) / 60) * HOUR_HEIGHT;
+      const hourHeight = viewMode === "week" ? WEEK_HOUR_HEIGHT : HOUR_HEIGHT;
+      const y = ((n.getHours() * 60 + n.getMinutes()) / 60) * hourHeight;
       el.scrollTop = Math.max(0, y - el.clientHeight * 0.4);
     } else {
-      el.scrollTop = 7 * HOUR_HEIGHT;
+      el.scrollTop = 7 * (viewMode === "week" ? WEEK_HOUR_HEIGHT : HOUR_HEIGHT);
     }
   }, [dayKey, loaded, view, viewMode, weekKeys]);
 
@@ -205,10 +207,22 @@ export default function App() {
     setModal(null);
   };
 
-  /** 繰り返しルールの保存。有効なら、先読み分の予定もすぐ生成する */
+  /** 繰り返しルールの保存。今日以降の未編集予定へ安全に反映する */
   const handleSaveRecurrence = async (rule: RecurrenceRule) => {
-    const gen = generateRecurrenceEvents([rule], dateKeyOf(new Date()), new Date().toISOString(), newId);
-    await commit({ putRecurrences: [gen.rules[0] ?? rule], putEvents: gen.events });
+    const old = recurrences.find((r) => r.id === rule.id);
+    // 「停止」は新規生成だけを止め、すでに作った予定は従来どおり残す。
+    if (old?.active && !rule.active) {
+      await commit({ putRecurrences: [rule] });
+      return;
+    }
+    const next = reconcileRecurrenceRule(old, rule, events, dateKeyOf(new Date()), new Date().toISOString(), newId);
+    await commit({ putRecurrences: [next.rule], putEvents: next.putEvents, deleteEventIds: next.deleteEventIds });
+  };
+
+  const handleDeleteRecurrence = async (rule: RecurrenceRule, deleteFuture: boolean) => {
+    const deleteEventIds = deleteFuture ? removableFutureOccurrences(rule.id, events, dateKeyOf(new Date())) : [];
+    await commit({ deleteRecurrenceIds: [rule.id], deleteEventIds });
+    setRecurrences((prev) => prev.filter((r) => r.id !== rule.id));
   };
 
   /** Googleカレンダーの取り込み：新規・更新を1トランザクションでまとめて保存する */
@@ -245,6 +259,22 @@ export default function App() {
 
   const step = (dir: 1 | -1) => {
     setDayKey(viewMode === "day" ? addDays(dayKey, dir) : viewMode === "week" ? addDays(dayKey, 7 * dir) : addMonths(dayKey, dir));
+  };
+
+  const onTouchStart = (ev: React.TouchEvent) => {
+    const t = ev.touches[0];
+    if (t) touchStart.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const onTouchEnd = (ev: React.TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    const t = ev.changedTouches[0];
+    if (!start || !t || modal !== null) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    step(dx < 0 ? 1 : -1);
   };
 
   const openDay = (key: string) => {
@@ -319,6 +349,7 @@ export default function App() {
           onBack={() => setView("calendar")}
           onSaveSettings={handleSaveSettings}
           onSaveRecurrence={handleSaveRecurrence}
+          onDeleteRecurrence={handleDeleteRecurrence}
           onRestore={handleRestore}
           onImportGoogle={handleImportGoogle}
         />
@@ -361,6 +392,7 @@ export default function App() {
         </div>
       </header>
 
+      <div className="calendar-swipe-area" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {viewMode === "day" && allDayEvents.length > 0 && (
         <div className="allday">
           <span className="allday-label">終日</span>
@@ -442,6 +474,7 @@ export default function App() {
           dayKeys={weekKeys}
           events={events}
           labelsByEvent={labelsByEvent}
+          nagara={nagara}
           linked={linked}
           nowLocal={nowLocal}
           todayKey={todayKey}
@@ -450,12 +483,14 @@ export default function App() {
           onOpenEvent={(e) => setModal({ mode: "edit", event: e })}
           onCreate={(range) => openNew(range)}
           onOpenDay={openDay}
+          onOpenSession={(session) => setModal({ mode: "session", session })}
         />
       )}
 
       {viewMode === "month" && (
         <MonthView anchor={dayKey} weekStartDay={weekStartDay} events={events} linked={linked} todayKey={todayKey} onOpenDay={openDay} />
       )}
+      </div>
 
       <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}>＋</button>
 

@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { COLOR_HEX, COLOR_KEYS, PARENT_CATEGORIES, PARENT_COLORS } from "./constants";
-import { formatShortDate, parseDateKey } from "./dateUtils";
+import { COLOR_KEYS, PARENT_CATEGORIES, PARENT_COLORS } from "./constants";
+import { formatShortDate } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
-import { BarChart, PieChart, type PieSlice } from "./ReviewCharts";
+import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import {
-  DEFAULT_BAR_TARGET, barSeries, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
-  formatSigned, parseBarTarget, parentOf, periodLabel, periodOf, shiftPeriod, unconfirmedInPeriod, type BarTarget, type PeriodKind,
+  DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
+  detailColor, equivalentPreviousCutoff, formatSigned, parseBarTarget, parentOf, periodCutoff, periodLabel, periodOf, shiftPeriod, stackedBarSeries,
+  unconfirmedInPeriod, type BarTarget, type PeriodKind,
 } from "./reviewLogic";
 import type { CalendarEvent, Nagara, ParentCategory, Settings } from "./types";
 
@@ -30,29 +31,36 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
 
   const period = useMemo(() => periodOf(kind, anchor, settings.weekStartDay), [kind, anchor, settings.weekStartDay]);
   const prevPeriod = useMemo(() => shiftPeriod(period, -1), [period]);
-  const stats = useMemo(() => computeReview(events, nagara, period, true), [events, nagara, period]);
-  const prevStats = useMemo(() => computeReview(events, nagara, prevPeriod, false), [events, nagara, prevPeriod]);
+  const cutoff = useMemo(() => periodCutoff(period, nowLocal), [period, nowLocal]);
+  const prevCutoff = useMemo(() => equivalentPreviousCutoff(period, prevPeriod, nowLocal), [period, prevPeriod, nowLocal]);
+  const stats = useMemo(() => computeReview(events, nagara, period, true, cutoff), [events, nagara, period, cutoff]);
+  const prevStats = useMemo(() => computeReview(events, nagara, prevPeriod, false, prevCutoff), [events, nagara, prevPeriod, prevCutoff]);
   const breakdown = useMemo(() => buildBreakdown(stats, settings), [stats, settings]);
   const diffRows = useMemo(() => buildDiffRows(stats, prevStats, settings), [stats, prevStats, settings]);
-  const bars = useMemo(() => barSeries(stats, target, settings), [stats, target, settings]);
+  const stackedBars = useMemo(() => stackedBarSeries(stats, target, settings), [stats, target, settings]);
+  const nagaraBars = useMemo(() => stats.perDay.map((d) => ({
+    date: d.date,
+    segments: stats.nagaraTotals
+      .map((n) => ({ key: n.label, label: n.label, minutes: d.byNagara[n.label] ?? 0, color: detailColor(`nagara:${n.label}`) }))
+      .filter((s) => s.minutes > 0),
+  })), [stats]);
   const unconfirmed = useMemo(() => unconfirmedInPeriod(events, period, nowLocal), [events, period, nowLocal]);
 
   const total = breakdown.totalMinutes;
   const todayKey = nowLocal.slice(0, 10);
   const isCurrent = periodOf(kind, todayKey, settings.weekStartDay).start === period.start;
-  const futureNote = period.end > todayKey;
+  const partialPeriod = cutoff < `${period.end}T00:00`;
   const drilled = drill ? breakdown.parents.find((p) => p.name === drill) ?? null : null;
 
   const move = (dir: 1 | -1) => onChange(kind, shiftPeriod(period, dir).start);
 
   const slices: PieSlice[] = drilled
-    ? drilled.children.map((c) => ({ key: c.key, label: c.name, value: c.minutes, color: COLOR_HEX[c.key] ?? COLOR_HEX.default }))
+    ? drilled.children.map((c) => ({ key: c.key, label: c.name, value: c.minutes, color: c.color }))
     : [
         ...breakdown.parents.map((p) => ({ key: p.name, label: p.name, value: p.minutes, color: PARENT_COLORS[p.name] })),
         { key: "未記録", label: "未記録", value: breakdown.unrecorded.minutes, color: PARENT_COLORS["未記録"] },
       ];
 
-  const barColor = target.type === "parent" ? PARENT_COLORS[target.name] : target.type === "color" ? COLOR_HEX[target.key] ?? COLOR_HEX.default : "#EC407A";
   const nameOf = (key: string) => (key === "none" ? "主行動なし" : categoryName(key, settings));
 
   return (
@@ -88,9 +96,11 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
             {drilled
               ? drilled.children.map((c) => (
                   <li key={c.key}>
-                    <i className="dot" style={{ background: COLOR_HEX[c.key] ?? COLOR_HEX.default }} />
+                    <i className="dot" style={{ background: c.color }} />
                     <span className="share-name">{c.name}</span>
-                    <span className="share-val">{formatShare(c.minutes, total)}</span>
+                    <span className="share-val">
+                      {formatDuration(c.minutes)}<br />全体 {formatPercent(c.minutes, total)}／{drilled.name}内 {formatPercent(c.minutes, drilled.minutes)}
+                    </span>
                   </li>
                 ))
               : [
@@ -115,13 +125,13 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
           </ul>
           <p className="hint">
             実績と種別不明のイベントを集計（予定・キャンセル・終日は除く）。主行動が重なった時間は件数で等分し、合計は期間の長さに一致します。
-            {futureNote ? "今日以降の分は「未記録」に含まれます。" : ""}
+            {partialPeriod ? "現在の期間は、未来を除いて現在時刻までを集計しています。" : ""}
           </p>
         </section>
 
         <section>
           <h2>前期間との差</h2>
-          <p className="hint">前期間：{periodLabel(prevPeriod)}</p>
+          <p className="hint">前期間：{periodLabel(prevPeriod)}{partialPeriod ? "（今期と同じ経過時間まで）" : ""}</p>
           <div className="table-scroll">
             <table className="data-table">
               <thead>
@@ -158,26 +168,35 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
               <option value="people">人がいる時間</option>
             </select>
           </div>
-          <BarChart
-            color={barColor}
-            bars={bars.map((b) => ({
-              label: String(parseDateKey(b.date).getDate()),
-              value: b.minutes,
-              title: `${formatShortDate(b.date)} ${formatDuration(b.minutes)}`,
-            }))}
-          />
+          <StackedBarChart days={stackedBars} />
+          <div className="stack-legend">
+            {[...new Map(stackedBars.flatMap((d) => d.segments).map((s) => [s.key, s])).values()].map((s) => (
+              <span key={s.key}><i style={{ background: s.color }} />{s.label}</span>
+            ))}
+          </div>
           <p className="hint">主行動のみ（ながらは含めません）。日付をまたぐ予定は0時で分けて、それぞれの日に数えます。</p>
         </section>
 
         <section>
           <h2>ながら・重なり</h2>
-          <h3>ながら（ラベル別の合計）</h3>
+          <h3>ながら（ラベル別の合計・日ごとの推移）</h3>
           {stats.nagaraTotals.length === 0 ? <p className="hint">この期間のながらはありません。</p> : (
             <table className="data-table">
               <tbody>
                 {stats.nagaraTotals.map((n) => <tr key={n.label}><td>{n.label}</td><td>{formatDuration(n.minutes)}</td></tr>)}
               </tbody>
             </table>
+          )}
+          {stats.nagaraTotals.length > 0 && (
+            <div className="nagara-trend">
+              <StackedBarChart days={nagaraBars} />
+              <div className="stack-legend">
+                {stats.nagaraTotals.map((n) => (
+                  <span key={n.label}><i style={{ background: detailColor(`nagara:${n.label}`) }} />{n.label}</span>
+                ))}
+              </div>
+              <p className="hint">同じ時間に複数のながらがある場合は、それぞれの時間として積み上がります。</p>
+            </div>
           )}
           <h3>主行動カテゴリ × ながら</h3>
           {stats.cross.length === 0 ? <p className="hint">なし</p> : (

@@ -60,6 +60,7 @@ export default function EventModal({
   const [people, setPeople] = useState<string[]>(src?.people ?? []);
   const [places, setPlaces] = useState<string[]>(src?.places ?? []);
   const [memo, setMemo] = useState(src?.memo ?? "");
+  const [subcategory, setSubcategory] = useState(src?.subcategory ?? "");
   const [drafts, setDrafts] = useState<NagaraDraft[]>(() => {
     if (event) return draftsFromNagara(nagara, event.id);
     if (template) return draftsFromNagara(nagara, template.id).map((d) => ({ ...d, key: newId(), id: null }));
@@ -178,6 +179,7 @@ export default function EventModal({
       people,
       places,
       memo,
+      subcategory: subcategory.trim() || null,
       id: event?.id ?? newId(),
       title: title.trim(),
       start,
@@ -359,10 +361,23 @@ export default function EventModal({
         </button>
         {showDetail && (
           <div className="detail">
-            <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：めぐちゃん" listId="people-suggestions" />
+            <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：友人" listId="people-suggestions" />
             <ChipInput label="場所（順番あり）" values={places} onChange={setPlaces} suggestions={placeList} placeholder="例：カフェ" reorderable listId="place-suggestions" />
             <label className="field-label" htmlFor="memo-input">メモ</label>
             <textarea id="memo-input" className="memo-input" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <label className="field-label" htmlFor="subcategory-input">振り返りの区分（任意）</label>
+            <input
+              id="subcategory-input"
+              className="title-input compact-input"
+              type="text"
+              list="subcategory-suggestions"
+              placeholder="空欄なら新規記録を自動分類"
+              value={subcategory}
+              onChange={(e) => setSubcategory(e.target.value)}
+            />
+            <datalist id="subcategory-suggestions">
+              {["睡眠", "仮眠", "通勤・移動", "食事", "準備", "入浴・シャワー", "家事", "定時", "残業", "休日出勤", "趣味・遊び", "発信", "Webアプリ開発", "お出かけ", "人"].map((x) => <option key={x} value={x} />)}
+            </datalist>
             <span className="field-label">種別</span>
             <div className="segmented">
               {(["plan", "actual"] as EventKind[]).concat(kind === "unknown" ? ["unknown" as EventKind] : []).map((k) => (

@@ -1,6 +1,7 @@
 {
-  "name": "カレンダー",
-  "short_name": "カレンダー",
+  "id": "/calendar-app/",
+  "name": "キロクカレンダー",
+  "short_name": "キロクカレンダー",
   "description": "予定と実績を分けて残す、自分用の時間記録カレンダー",
   "start_url": "/calendar-app/",
   "scope": "/calendar-app/",

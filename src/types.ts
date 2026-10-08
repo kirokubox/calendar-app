@@ -21,6 +21,8 @@ export interface CalendarEvent {
   /** 順番を保持する */
   places: string[];
   memo: string;
+  /** 振り返り用の区分。null＝新規アプリ記録は自動判定、Google過去データは従来区分のまま */
+  subcategory: string | null;
   /** 実績が対応する予定のid（多対1） */
   planId: string | null;
   /** 予定用。キャンセルした予定は cancelled */
@@ -63,6 +65,7 @@ export interface PlanSnapshot {
   people: string[];
   places: string[];
   memo: string;
+  subcategory?: string | null;
   status: EventStatus;
   cancelReason: string;
 }

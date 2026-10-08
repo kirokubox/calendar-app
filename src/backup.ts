@@ -54,6 +54,7 @@ function validateEventItem(v: unknown, index: number): string | CalendarEvent {
   if (v.people !== undefined && !isStrArray(v.people)) return `${at}.people が文字列の配列ではありません`;
   if (v.places !== undefined && !isStrArray(v.places)) return `${at}.places が文字列の配列ではありません`;
   if (v.memo !== undefined && typeof v.memo !== "string") return `${at}.memo が文字列ではありません`;
+  if (v.subcategory !== undefined && !isStrOrNull(v.subcategory)) return `${at}.subcategory が文字列または null ではありません`;
   if (v.cancelReason !== undefined && typeof v.cancelReason !== "string") return `${at}.cancelReason が文字列ではありません`;
   if (v.status !== undefined && v.status !== "active" && v.status !== "cancelled") return `${at}.status が active / cancelled ではありません`;
   if (v.source !== undefined && v.source !== "app" && v.source !== "google") return `${at}.source が app / google ではありません`;
@@ -105,6 +106,7 @@ function validateRevisionItem(v: unknown, index: number): string | PlanRevision 
       people: isStrArray(s.people) ? (s.people as string[]) : [],
       places: isStrArray(s.places) ? (s.places as string[]) : [],
       memo: typeof s.memo === "string" ? s.memo : "",
+      subcategory: typeof s.subcategory === "string" ? s.subcategory : null,
       status: s.status === "cancelled" ? "cancelled" : "active",
       cancelReason: typeof s.cancelReason === "string" ? s.cancelReason : "",
     },

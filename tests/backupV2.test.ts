@@ -15,7 +15,7 @@ const nagara: Nagara = { id: "n1", label: "YouTube", type: "nagara", eventId: "a
 const session: Nagara = { id: "n2", label: "カフェ", type: "place", eventId: null, start: "2026-10-08T15:30", end: "2026-10-08T18:45", createdAt: stamp, updatedAt: stamp };
 const revision: PlanRevision = {
   id: "r1", planId: "a", changedAt: stamp,
-  snapshot: { title: "旧", start: "2026-10-08T09:00", end: "2026-10-08T10:00", allDay: false, colorId: null, people: [], places: [], memo: "", status: "active", cancelReason: "" },
+  snapshot: { title: "旧", start: "2026-10-08T09:00", end: "2026-10-08T10:00", allDay: false, colorId: null, people: [], places: [], memo: "", subcategory: null, status: "active", cancelReason: "" },
 };
 const rule: RecurrenceRule = {
   id: "c1", title: "朝礼", colorId: "11", startTime: "09:00", endTime: "09:15", weekdays: [1, 2, 3, 4, 5], startDate: "2026-10-01", endDate: null, active: true,

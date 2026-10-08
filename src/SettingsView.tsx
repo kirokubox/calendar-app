@@ -16,11 +16,12 @@ interface Props {
   onBack: () => void;
   onSaveSettings: (settings: Settings) => Promise<void>;
   onSaveRecurrence: (rule: RecurrenceRule) => Promise<void>;
+  onDeleteRecurrence: (rule: RecurrenceRule, deleteFuture: boolean) => Promise<void>;
   onRestore: (backup: BackupFile, sourceVersion: 1 | 2) => Promise<void>;
   onImportGoogle: (create: CalendarEvent[], update: CalendarEvent[]) => Promise<void>;
 }
 
-export default function SettingsView({ settings, events, nagara, revisions, recurrences, onBack, onSaveSettings, onSaveRecurrence, onRestore, onImportGoogle }: Props) {
+export default function SettingsView({ settings, events, nagara, revisions, recurrences, onBack, onSaveSettings, onSaveRecurrence, onDeleteRecurrence, onRestore, onImportGoogle }: Props) {
   const [labels, setLabels] = useState<Record<string, string>>({ ...settings.colorLabels });
   const [labelMessage, setLabelMessage] = useState("");
   const [parents, setParents] = useState<Record<string, ParentCategory>>({ ...settings.categoryParents });
@@ -202,7 +203,7 @@ export default function SettingsView({ settings, events, nagara, revisions, recu
           </div>
         </section>
 
-        <RecurrenceSettings settings={settings} recurrences={recurrences} onSave={onSaveRecurrence} />
+        <RecurrenceSettings settings={settings} recurrences={recurrences} onSave={onSaveRecurrence} onDelete={onDeleteRecurrence} />
 
         <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} />
 

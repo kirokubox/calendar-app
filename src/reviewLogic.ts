@@ -96,6 +96,8 @@ interface MainSpan extends Span {
   key: string;
   people: boolean;
   title: string;
+  detailOverride: string | null;
+  source: CalendarEvent["source"];
 }
 interface LabelSpan extends Span {
   label: string;
@@ -128,6 +130,8 @@ export function reviewNagaraInterval(n: Nagara, events: Map<string, CalendarEven
 export interface DayStat {
   date: string;
   byColor: Record<string, number>;
+  byDetail: Record<string, number>;
+  byNagara: Record<string, number>;
   people: number;
   unrecorded: number;
 }
@@ -158,6 +162,8 @@ export interface ReviewStats {
   periodMinutes: number;
   unrecorded: number;
   byColor: Record<string, number>;
+  /** キーは「色キー\0区分名」。親カテゴリは色から決める */
+  byDetail: Record<string, number>;
   /** 人がいる時間（主行動のうち people が空でないもの。等分後） */
   peopleMinutes: number;
   perDay: DayStat[];
@@ -174,21 +180,23 @@ const SEP = "\u0000";
  * 期間内に絞ってから計算し、日の境目（0時）でも区切って日ごとの値も出す。
  * detail=false のときは、ながら・場所の集計を省く（前期間の差だけが欲しいとき）。
  */
-export function computeReview(events: CalendarEvent[], nagara: Nagara[], period: Period, detail = true): ReviewStats {
+export function computeReview(events: CalendarEvent[], nagara: Nagara[], period: Period, detail = true, cutoff?: string): ReviewStats {
   const P0 = absMin(`${period.start}T00:00`);
-  const P1 = absMin(`${period.end}T00:00`);
-  const days = Math.round((P1 - P0) / 1440);
+  const fullP1 = absMin(`${period.end}T00:00`);
+  const P1 = cutoff === undefined ? fullP1 : Math.max(P0, Math.min(fullP1, absMin(cutoff)));
+  const days = Math.round((fullP1 - P0) / 1440);
   const dayKeys = periodDays(period);
-  const lo = `${period.start}T00:00`;
-  const hi = `${period.end}T00:00`;
 
   const mains: MainSpan[] = [];
   for (const e of events) {
-    if (!isMainEvent(e) || !(e.start < hi && e.end > lo)) continue;
+    if (!isMainEvent(e)) continue;
     const s = Math.max(absMin(e.start), P0);
     const t = Math.min(absMin(e.end), P1);
     if (t <= s) continue;
-    mains.push({ s, t, ev: e, key: colorKeyOf(e), people: e.people.length > 0, title: e.title.trim() });
+    mains.push({
+      s, t, ev: e, key: colorKeyOf(e), people: e.people.length > 0, title: e.title.trim(),
+      detailOverride: e.subcategory, source: e.source,
+    });
   }
 
   // ながら・場所：ラベルごとに期間内の区間をまとめる（同じラベルの重なりは1つに）
@@ -200,7 +208,7 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
       const label = n.label.trim();
       if (label === "") continue;
       const iv = reviewNagaraInterval(n, evMap);
-      if (!iv || !(iv.start < hi && iv.end > lo)) continue;
+      if (!iv) continue;
       const s = Math.max(absMin(iv.start), P0);
       const t = Math.min(absMin(iv.end), P1);
       if (t <= s) continue;
@@ -230,7 +238,14 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
 
   // スイープ（境目＝主行動・ながらの開始終了＋日の境目）
   const points = new Set<number>([P0, P1]);
-  for (let d = 1; d < days; d++) points.add(P0 + d * 1440);
+  for (let d = 1; d < days; d++) if (P0 + d * 1440 < P1) points.add(P0 + d * 1440);
+  // 仕事の定時区分がイベント途中でも正しく切り替わる境界。
+  for (let d = 0; d < days; d++) {
+    for (const minute of [9 * 60, 12 * 60, 12 * 60 + 45, 17 * 60 + 30]) {
+      const p = P0 + d * 1440 + minute;
+      if (p > P0 && p < P1) points.add(p);
+    }
+  }
   for (const m of mains) {
     points.add(m.s);
     points.add(m.t);
@@ -244,9 +259,10 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
   mergedNagara.sort((a, b) => a.s - b.s);
 
   const byColor: Record<string, number> = {};
+  const byDetail: Record<string, number> = {};
   let unrecorded = 0;
   let peopleMinutes = 0;
-  const perDay: DayStat[] = dayKeys.map((date) => ({ date, byColor: {}, people: 0, unrecorded: 0 }));
+  const perDay: DayStat[] = dayKeys.map((date) => ({ date, byColor: {}, byDetail: {}, byNagara: {}, people: 0, unrecorded: 0 }));
   const crossMap = new Map<string, number>();
   const mainByTitle = new Map<string, number>();
   const nagaraOnly = new Map<string, number>();
@@ -274,6 +290,10 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
       for (const m of activeM) {
         byColor[m.key] = (byColor[m.key] ?? 0) + share;
         day.byColor[m.key] = (day.byColor[m.key] ?? 0) + share;
+        const detailName = subcategoryAt(m, a);
+        const detailKey = `${m.key}${SEP}${detailName}`;
+        byDetail[detailKey] = (byDetail[detailKey] ?? 0) + share;
+        day.byDetail[detailKey] = (day.byDetail[detailKey] ?? 0) + share;
         if (m.people) {
           peopleMinutes += share;
           day.people += share;
@@ -294,6 +314,7 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
         }
       }
       if (!activeM.some((m) => m.title === l.label)) nagaraOnly.set(l.label, (nagaraOnly.get(l.label) ?? 0) + len);
+      if (!activeM.some((m) => m.title === l.label)) day.byNagara[l.label] = (day.byNagara[l.label] ?? 0) + len;
     }
   }
 
@@ -310,7 +331,37 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
     nagaraTotal: n.minutes,
   }));
 
-  return { periodMinutes: P1 - P0, unrecorded, byColor, peopleMinutes, perDay, nagaraTotals, placeTotals, cross, sideBySide };
+  return { periodMinutes: P1 - P0, unrecorded, byColor, byDetail, peopleMinutes, perDay, nagaraTotals, placeTotals, cross, sideBySide };
+}
+
+/** 新規アプリ記録だけを自動で細分化する。Google過去データは従来の色区分を維持する。 */
+function subcategoryAt(m: MainSpan, minute: number): string {
+  if (m.detailOverride?.trim()) return m.detailOverride.trim();
+  if (m.source === "google") return "";
+  const t = m.title;
+  if (m.key === "1") return t.includes("仮眠") ? "仮眠" : "睡眠";
+  if (m.key === "3") {
+    if (/通勤|移動|帰宅|外出|電車|徒歩/.test(t)) return "通勤・移動";
+    if (/朝食|昼食|夕食|食事|ご飯|社食|外食|料理/.test(t)) return "食事";
+    if (/身支度|準備|着替え|スキンケア|歯磨き/.test(t)) return "準備";
+    if (/入浴|風呂|シャワー|サウナ/.test(t)) return "入浴・シャワー";
+    if (/洗濯|食器|洗い物|掃除|ゴミ|家事/.test(t)) return "家事";
+    return "生活・その他";
+  }
+  if (m.key === "11") {
+    if (/休日出勤/.test(t)) return "休日出勤";
+    const d = new Date(minute * 60000);
+    const weekday = d.getUTCDay();
+    if (weekday === 0 || weekday === 6) return "休日出勤";
+    const hm = d.getUTCHours() * 60 + d.getUTCMinutes();
+    return (hm >= 9 * 60 && hm < 12 * 60) || (hm >= 12 * 60 + 45 && hm < 17 * 60 + 30) ? "定時" : "残業";
+  }
+  if (m.key === "9") {
+    if (/Webアプリ|アプリ開発|開発作業/.test(t)) return "Webアプリ開発";
+    if (/記録垢|開発垢|投稿|記事|執筆|編集|撮影|発信/.test(t)) return "発信";
+    return "発信・開発（その他）";
+  }
+  return "";
 }
 
 // ---------- 階層（親 → 色カテゴリ） ----------
@@ -320,6 +371,8 @@ export interface BreakdownChild {
   name: string;
   minutes: number;
   ratio: number;
+  parentRatio: number;
+  color: string;
 }
 export interface BreakdownParent {
   name: ParentCategory;
@@ -340,14 +393,17 @@ export function buildBreakdown(stats: ReviewStats, settings: Settings): Breakdow
   const ratio = (m: number) => (total > 0 ? m / total : 0);
   const parents: BreakdownParent[] = PARENT_CATEGORIES.map((name) => ({ name, minutes: 0, ratio: 0, children: [] }));
   const byName = new Map(parents.map((p) => [p.name as string, p]));
-  for (const [key, minutes] of Object.entries(stats.byColor)) {
+  for (const [detailKey, minutes] of Object.entries(stats.byDetail)) {
     if (minutes <= EPS) continue;
+    const [key, detailName] = detailKey.split(SEP);
     const p = byName.get(parentOf(key, settings)) ?? byName.get("その他")!;
+    const name = detailName || categoryName(key, settings);
     p.minutes += minutes;
-    p.children.push({ key, name: categoryName(key, settings), minutes, ratio: ratio(minutes) });
+    p.children.push({ key: detailKey, name, minutes, ratio: ratio(minutes), parentRatio: 0, color: detailColor(detailKey) });
   }
   for (const p of parents) {
     p.ratio = ratio(p.minutes);
+    for (const c of p.children) c.parentRatio = p.minutes > 0 ? c.minutes / p.minutes : 0;
     p.children.sort((a, b) => b.minutes - a.minutes || a.key.localeCompare(b.key));
   }
   return {
@@ -370,19 +426,22 @@ export interface DiffRow {
 
 /** 今期・前期・差（評価の言葉は付けない）。親カテゴリの下に色カテゴリ、最後に未記録 */
 export function buildDiffRows(cur: ReviewStats, prev: ReviewStats, settings: Settings): DiffRow[] {
-  const keys = new Set([...Object.keys(cur.byColor), ...Object.keys(prev.byColor)]);
+  const keys = new Set([...Object.keys(cur.byDetail), ...Object.keys(prev.byDetail)]);
   const rows: DiffRow[] = [];
   for (const parent of PARENT_CATEGORIES) {
     const kids = [...keys]
-      .filter((k) => parentOf(k, settings) === parent)
-      .map((k) => ({ k, now: cur.byColor[k] ?? 0, prev: prev.byColor[k] ?? 0 }))
+      .filter((k) => parentOf(k.split(SEP)[0], settings) === parent)
+      .map((k) => ({ k, now: cur.byDetail[k] ?? 0, prev: prev.byDetail[k] ?? 0 }))
       .filter((x) => x.now > EPS || x.prev > EPS)
       .sort((a, b) => b.now - a.now || a.k.localeCompare(b.k));
     if (kids.length === 0) continue;
     const now = kids.reduce((s, x) => s + x.now, 0);
     const pv = kids.reduce((s, x) => s + x.prev, 0);
     rows.push({ name: parent, now, prev: pv, diff: now - pv, depth: 0 });
-    for (const x of kids) rows.push({ name: categoryName(x.k, settings), now: x.now, prev: x.prev, diff: x.now - x.prev, depth: 1 });
+    for (const x of kids) {
+      const [colorKey, detailName] = x.k.split(SEP);
+      rows.push({ name: detailName || categoryName(colorKey, settings), now: x.now, prev: x.prev, diff: x.now - x.prev, depth: 1 });
+    }
   }
   rows.push({ name: "未記録", now: cur.unrecorded, prev: prev.unrecorded, diff: cur.unrecorded - prev.unrecorded, depth: 0 });
   return rows;
@@ -414,6 +473,66 @@ export function barSeries(stats: ReviewStats, target: BarTarget, settings: Setti
     else for (const [key, m] of Object.entries(d.byColor)) if (parentOf(key, settings) === target.name) minutes += m;
     return { date: d.date, minutes };
   });
+}
+
+export interface StackedSegment {
+  key: string;
+  label: string;
+  minutes: number;
+  color: string;
+}
+
+export interface StackedDay {
+  date: string;
+  segments: StackedSegment[];
+}
+
+/** 親カテゴリを、その日の区分別に積み上げる。色・人を選んだ場合は単色になる。 */
+export function stackedBarSeries(stats: ReviewStats, target: BarTarget, settings: Settings): StackedDay[] {
+  return stats.perDay.map((d) => {
+    if (target.type === "people") return { date: d.date, segments: [{ key: "people", label: "人がいる時間", minutes: d.people, color: "#EC407A" }] };
+    if (target.type === "color") {
+      return { date: d.date, segments: [{ key: target.key, label: categoryName(target.key, settings), minutes: d.byColor[target.key] ?? 0, color: detailColor(target.key) }] };
+    }
+    const segments = Object.entries(d.byDetail)
+      .filter(([k, minutes]) => minutes > EPS && parentOf(k.split(SEP)[0], settings) === target.name)
+      .map(([k, minutes]) => {
+        const [colorKey, detailName] = k.split(SEP);
+        return { key: k, label: detailName || categoryName(colorKey, settings), minutes, color: detailColor(k) };
+      })
+      .sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label));
+    return { date: d.date, segments };
+  });
+}
+
+export function detailColor(key: string): string {
+  const palette = ["#5C6BC0", "#26A69A", "#EF5350", "#FFB300", "#8D6E63", "#42A5F5", "#AB47BC", "#66BB6A", "#EC407A"];
+  let hash = 0;
+  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return palette[hash % palette.length];
+}
+
+function localFromAbsMin(value: number): string {
+  const d = new Date(value * 60000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+/** 今期が途中なら現在時刻、過去なら期間末、未来なら期間初を返す。 */
+export function periodCutoff(period: Period, nowLocal: string): string {
+  const start = `${period.start}T00:00`;
+  const end = `${period.end}T00:00`;
+  if (nowLocal <= start) return start;
+  if (nowLocal >= end) return end;
+  return nowLocal;
+}
+
+/** 現在期間との比較用に、前期間の同じ経過時間地点を返す。 */
+export function equivalentPreviousCutoff(period: Period, previous: Period, nowLocal: string): string {
+  const elapsed = absMin(periodCutoff(period, nowLocal)) - absMin(`${period.start}T00:00`);
+  const prevStart = absMin(`${previous.start}T00:00`);
+  const prevEnd = absMin(`${previous.end}T00:00`);
+  return localFromAbsMin(Math.min(prevEnd, prevStart + Math.max(0, elapsed)));
 }
 
 // ---------- 未確定・予定の変更 ----------

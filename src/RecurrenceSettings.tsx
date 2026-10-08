@@ -9,6 +9,7 @@ interface Props {
   settings: Settings;
   recurrences: RecurrenceRule[];
   onSave: (rule: RecurrenceRule) => Promise<void>;
+  onDelete: (rule: RecurrenceRule, deleteFuture: boolean) => Promise<void>;
 }
 
 interface Draft {
@@ -35,7 +36,7 @@ function summary(r: RecurrenceRule): string {
 }
 
 /** 設定画面の「平日の繰り返し予定」：ルールの一覧・追加・編集・停止 */
-export default function RecurrenceSettings({ settings, recurrences, onSave }: Props) {
+export default function RecurrenceSettings({ settings, recurrences, onSave, onDelete }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,9 +69,23 @@ export default function RecurrenceSettings({ settings, recurrences, onSave }: Pr
       };
       await onSave(rule);
       setDraft(null);
-      setMessage("保存しました。今日から56日先までの予定を作成しました（作成済みの日付は作り直しません）");
+      setMessage("保存しました。今日以降の未編集予定へ反映しました");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "保存できませんでした");
+    }
+    setBusy(false);
+  };
+
+  const remove = async (r: RecurrenceRule) => {
+    const deleteFuture = window.confirm("ルールと一緒に、今日以降の未編集予定も削除しますか？\n\nOK：ルール＋未来の未編集予定\nキャンセル：次の確認でルールだけ削除できます");
+    if (!deleteFuture && !window.confirm("ルールだけ削除しますか？\n作成済みの予定は残ります。")) return;
+    setBusy(true);
+    try {
+      await onDelete(r, deleteFuture);
+      setDraft(null);
+      setMessage(deleteFuture ? "ルールと未来の未編集予定を削除しました" : "ルールだけ削除しました");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "削除できませんでした");
     }
     setBusy(false);
   };
@@ -93,8 +108,8 @@ export default function RecurrenceSettings({ settings, recurrences, onSave }: Pr
 
   return (
     <section>
-      <h2>平日の繰り返し予定</h2>
-      <p className="hint">決まった枠（仕事など）を、起動時に今日から56日先まで予定として作ります。作った予定を削除しても復活しません。ルールを変えても、作成済みの予定は変わりません。</p>
+      <h2>繰り返し予定</h2>
+      <p className="hint">選んだ曜日の予定を今日から56日先まで作ります。ルール編集は今日以降の未編集予定へ反映し、個別編集・実績リンク・キャンセル済みの予定は保護します。</p>
       {sorted.length === 0 && <p className="hint">ルールはまだありません。</p>}
       <ul className="rule-list">
         {sorted.map((r) => (
@@ -103,6 +118,7 @@ export default function RecurrenceSettings({ settings, recurrences, onSave }: Pr
             <span className="rule-main"><strong>{r.title}{r.active ? "" : "（停止中）"}</strong>{summary(r)}</span>
             <button type="button" className="secondary-btn small" disabled={busy} onClick={() => edit(r)}>編集</button>
             <button type="button" className="secondary-btn small" disabled={busy} onClick={() => toggleActive(r)}>{r.active ? "停止" : "再開"}</button>
+            <button type="button" className="danger-btn small" disabled={busy} onClick={() => remove(r)}>削除</button>
           </li>
         ))}
       </ul>
