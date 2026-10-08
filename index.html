@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#4285f4" />
+    <meta name="description" content="予定と実績を分けて残す、自分用の時間記録カレンダー" />
+
+    <!-- OGP／Xカード：noteやSNSにURLを貼ったときのリンクカード用（favicon・PWAアイコンとは別用途） -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kirokubox.github.io/calendar-app/" />
+    <meta property="og:title" content="カレンダー" />
+    <meta property="og:description" content="予定と実績を分けて残す、自分用の時間記録カレンダー" />
+    <meta property="og:image" content="https://kirokubox.github.io/calendar-app/ogp.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="カレンダー" />
+    <meta name="twitter:description" content="予定と実績を分けて残す、自分用の時間記録カレンダー" />
+    <meta name="twitter:image" content="https://kirokubox.github.io/calendar-app/ogp.png" />
+
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="%BASE_URL%icons/calendar-app-icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icons/calendar-app-icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%icons/apple-touch-icon.png" />
+    <title>カレンダー</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
