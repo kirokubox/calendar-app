@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { backupFileName, buildBackup, summarizeBackup, validateBackup, type BackupSummary } from "./backup";
 import { APP_VERSION, COLOR_HEX, COLOR_IDS, PARENT_CATEGORIES } from "./constants";
 import { dateKeyOf, weekdayName } from "./dateUtils";
+import AiMarkdownSettings from "./AiMarkdownSettings";
+import GoogleImportSettings from "./GoogleImportSettings";
 import RecurrenceSettings from "./RecurrenceSettings";
 import type { BackupFile, CalendarEvent, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings } from "./types";
 
@@ -15,9 +17,10 @@ interface Props {
   onSaveSettings: (settings: Settings) => Promise<void>;
   onSaveRecurrence: (rule: RecurrenceRule) => Promise<void>;
   onRestore: (backup: BackupFile, sourceVersion: 1 | 2) => Promise<void>;
+  onImportGoogle: (create: CalendarEvent[], update: CalendarEvent[]) => Promise<void>;
 }
 
-export default function SettingsView({ settings, events, nagara, revisions, recurrences, onBack, onSaveSettings, onSaveRecurrence, onRestore }: Props) {
+export default function SettingsView({ settings, events, nagara, revisions, recurrences, onBack, onSaveSettings, onSaveRecurrence, onRestore, onImportGoogle }: Props) {
   const [labels, setLabels] = useState<Record<string, string>>({ ...settings.colorLabels });
   const [labelMessage, setLabelMessage] = useState("");
   const [parents, setParents] = useState<Record<string, ParentCategory>>({ ...settings.categoryParents });
@@ -200,6 +203,10 @@ export default function SettingsView({ settings, events, nagara, revisions, recu
         </section>
 
         <RecurrenceSettings settings={settings} recurrences={recurrences} onSave={onSaveRecurrence} />
+
+        <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} />
+
+        <GoogleImportSettings events={events} onImport={onImportGoogle} />
 
         <section>
           <h2>バックアップ</h2>

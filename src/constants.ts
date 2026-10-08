@@ -43,6 +43,16 @@ export function defaultCategoryParents(): Record<string, ParentCategory> {
   return parents;
 }
 
+/** 振り返りの円グラフ用：親カテゴリの色（評価を連想させない中立色） */
+export const PARENT_COLORS: Record<string, string> = {
+  睡眠: "#5C6BC0",
+  生活: "#26A69A",
+  仕事: "#EF5350",
+  自由時間: "#FFB300",
+  その他: "#8D6E63",
+  未記録: "#B0BEC5",
+};
+
 export const DB_SCHEMA_VERSION = 2;
 
 export function defaultSettings(): Settings {

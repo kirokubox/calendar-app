@@ -17,6 +17,8 @@ import {
 import EventModal, { type ModalTab } from "./EventModal";
 import EventBlock, { eventStyle } from "./EventBlock";
 import MonthView from "./MonthView";
+import ReviewView from "./ReviewView";
+import type { PeriodKind } from "./reviewLogic";
 import SettingsView from "./SettingsView";
 import WeekView from "./WeekView";
 import { mergeById, settingsForRestore } from "./backup";
@@ -42,7 +44,9 @@ export default function App() {
   const [now, setNow] = useState(() => new Date());
   const [dayKey, setDayKey] = useState(() => dateKeyOf(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>("day");
-  const [view, setView] = useState<"calendar" | "settings">("calendar");
+  const [view, setView] = useState<"calendar" | "settings" | "review">("calendar");
+  const [reviewKind, setReviewKind] = useState<PeriodKind>("week");
+  const [reviewAnchor, setReviewAnchor] = useState(() => dateKeyOf(new Date()));
   const [modal, setModal] = useState<ModalState>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
@@ -142,7 +146,8 @@ export default function App() {
   const applyChanges = (c: Changes) => {
     const delE = new Set(c.deleteEventIds ?? []);
     const putE = c.putEvents ?? [];
-    setEvents((prev) => [...prev.filter((e) => !delE.has(e.id) && !putE.some((p) => p.id === e.id)), ...putE]);
+    const putEIds = new Set(putE.map((p) => p.id));
+    setEvents((prev) => [...prev.filter((e) => !delE.has(e.id) && !putEIds.has(e.id)), ...putE]);
     const delN = new Set(c.deleteNagaraIds ?? []);
     const putN = c.putNagara ?? [];
     if (delN.size > 0 || putN.length > 0) setNagara((prev) => [...prev.filter((n) => !delN.has(n.id) && !putN.some((p) => p.id === n.id)), ...putN]);
@@ -206,6 +211,11 @@ export default function App() {
     await commit({ putRecurrences: [gen.rules[0] ?? rule], putEvents: gen.events });
   };
 
+  /** Googleカレンダーの取り込み：新規・更新を1トランザクションでまとめて保存する */
+  const handleImportGoogle = async (create: CalendarEvent[], update: CalendarEvent[]) => {
+    await commit({ putEvents: [...create, ...update] });
+  };
+
   const handleSaveSession = async (n: Nagara) => {
     await putNagara(n);
     setNagara((prev) => [...prev.filter((x) => x.id !== n.id), n]);
@@ -250,6 +260,53 @@ export default function App() {
     );
   }
 
+  const modalEl = modal && (
+      <EventModal
+        key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : `new-${modal.range.start}-${modal.template?.id ?? ""}`}
+        mode={modal.mode}
+        event={modal.mode === "edit" ? modal.event : null}
+        session={modal.mode === "session" ? modal.session : null}
+        range={modal.mode === "new" ? modal.range : null}
+        initialTab={modal.mode === "new" ? modal.tab : "event"}
+        template={modal.mode === "new" ? modal.template ?? null : null}
+        revisions={modal.mode === "edit" ? revisionsOfPlan(revisions, modal.event.id) : []}
+        linkedActualCount={modal.mode === "edit" ? events.filter((e) => e.planId === modal.event.id).length : 0}
+        planOfActual={modal.mode === "edit" && modal.event.planId ? events.find((e) => e.id === modal.event.planId) ?? null : null}
+        events={events}
+        nagara={nagara}
+        settings={settings}
+        now={nowLocal}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        onAsPlanned={handleAsPlanned}
+        onCancelPlan={handleCancelPlan}
+        onUncancelPlan={handleUncancelPlan}
+        onRecordActual={(plan) => setModal({ mode: "new", range: { start: plan.start, end: plan.end }, tab: "event", template: plan })}
+        onSaveSession={handleSaveSession}
+        onDeleteSession={handleDeleteSession}
+        onClose={() => setModal(null)}
+      />
+  );
+
+  if (view === "review") {
+    return (
+      <div className="app">
+        <ReviewView
+          events={events}
+          nagara={nagara}
+          settings={settings}
+          nowLocal={nowLocal}
+          kind={reviewKind}
+          anchor={reviewAnchor}
+          onChange={(k, a) => { setReviewKind(k); setReviewAnchor(a); }}
+          onBack={() => setView("calendar")}
+          onOpenEvent={(e) => setModal({ mode: "edit", event: e })}
+        />
+        {modalEl}
+      </div>
+    );
+  }
+
   if (view === "settings") {
     return (
       <div className="app">
@@ -263,6 +320,7 @@ export default function App() {
           onSaveSettings={handleSaveSettings}
           onSaveRecurrence={handleSaveRecurrence}
           onRestore={handleRestore}
+          onImportGoogle={handleImportGoogle}
         />
       </div>
     );
@@ -289,6 +347,7 @@ export default function App() {
           <button type="button" className="icon-btn" aria-label={`次の${stepName}`} onClick={() => step(1)}>▶</button>
           <span className="spacer" />
           <button type="button" className="text-btn" onClick={() => setDayKey(todayKey)} disabled={isCurrent}>今日</button>
+          <button type="button" className="icon-btn" aria-label="振り返り" onClick={() => { setReviewAnchor(dayKey); setView("review"); }}>📊</button>
           <button type="button" className="icon-btn" aria-label="設定" onClick={() => setView("settings")}>⚙</button>
         </div>
         <div className="view-switch">
@@ -400,33 +459,7 @@ export default function App() {
 
       <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}>＋</button>
 
-      {modal && (
-        <EventModal
-          key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : `new-${modal.range.start}-${modal.template?.id ?? ""}`}
-          mode={modal.mode}
-          event={modal.mode === "edit" ? modal.event : null}
-          session={modal.mode === "session" ? modal.session : null}
-          range={modal.mode === "new" ? modal.range : null}
-          initialTab={modal.mode === "new" ? modal.tab : "event"}
-          template={modal.mode === "new" ? modal.template ?? null : null}
-          revisions={modal.mode === "edit" ? revisionsOfPlan(revisions, modal.event.id) : []}
-          linkedActualCount={modal.mode === "edit" ? events.filter((e) => e.planId === modal.event.id).length : 0}
-          planOfActual={modal.mode === "edit" && modal.event.planId ? events.find((e) => e.id === modal.event.planId) ?? null : null}
-          events={events}
-          nagara={nagara}
-          settings={settings}
-          now={nowLocal}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onAsPlanned={handleAsPlanned}
-          onCancelPlan={handleCancelPlan}
-          onUncancelPlan={handleUncancelPlan}
-          onRecordActual={(plan) => setModal({ mode: "new", range: { start: plan.start, end: plan.end }, tab: "event", template: plan })}
-          onSaveSession={handleSaveSession}
-          onDeleteSession={handleDeleteSession}
-          onClose={() => setModal(null)}
-        />
-      )}
+      {modalEl}
     </div>
   );
 }

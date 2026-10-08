@@ -22,6 +22,9 @@
     "src/nagaraLogic.ts",
     "src/backup.ts",
     "src/planLogic.ts",
+    "src/reviewLogic.ts",
+    "src/reviewMarkdown.ts",
+    "src/googleImport.ts",
     "tests/dateUtils.test.ts",
     "tests/layout.test.ts",
     "tests/eventLogic.test.ts",
@@ -31,6 +34,9 @@
     "tests/viewDates.test.ts",
     "tests/eventDisplay.test.ts",
     "tests/backupV2.test.ts",
-    "tests/planLogic.test.ts"
+    "tests/planLogic.test.ts",
+    "tests/reviewLogic.test.ts",
+    "tests/reviewMarkdown.test.ts",
+    "tests/googleImport.test.ts"
   ]
 }
