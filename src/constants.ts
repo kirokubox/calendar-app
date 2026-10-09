@@ -1,6 +1,6 @@
 import type { ParentCategory, Settings } from "./types.js";
 
-export const APP_VERSION = "0.3.1";
+export const APP_VERSION = "0.3.2";
 export const BACKUP_APP_NAME = "calendar-app";
 
 export const COLOR_IDS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"] as const;
