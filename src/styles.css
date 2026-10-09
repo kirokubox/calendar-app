@@ -353,3 +353,14 @@ button { cursor: pointer; }
 .month-cell.holiday .month-num { color: #c62828; }
 .month-cell.today.holiday .month-num { color: #fff; background: #c62828; }
 .month-holiday { display: block; font-size: 0.55rem; font-weight: 500; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* 土日の色分け（土＝青、日・祝＝赤）。祝日の指定は後に書いて優先する */
+.date-label.sat, .week-day-head.sat, .month-weekdays .sat, .month-cell.sat .month-num { color: #1565c0; }
+.date-label.sun, .week-day-head.sun, .month-weekdays .sun, .month-cell.sun .month-num { color: #c62828; }
+.week-day-head.sat.today { color: #fff; background: #1565c0; }
+.week-day-head.sun.today { color: #fff; background: #c62828; }
+.month-cell.today.sat .month-num { color: #fff; background: #1565c0; }
+.month-cell.today.sun .month-num { color: #fff; background: #c62828; }
+.month-cell.other.sat .month-num, .month-cell.other.sun .month-num { opacity: 0.6; }
+.date-label.holiday, .week-day-head.holiday, .month-cell.holiday .month-num { color: #c62828; }
+.week-day-head.holiday.today, .month-cell.today.holiday .month-num { color: #fff; background: #c62828; }

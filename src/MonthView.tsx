@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { eventStyle } from "./EventBlock";
-import { monthGridWeeks, weekdayName } from "./dateUtils";
+import { monthGridWeeks, weekdayName, weekendClass } from "./dateUtils";
 import { displayTitle, monthCellItems } from "./eventLogic";
 import { holidayName } from "./holidays";
 import type { CalendarEvent } from "./types";
@@ -25,7 +25,7 @@ export default function MonthView({ anchor, weekStartDay, events, linked, todayK
     <div className="month">
       <div className="month-weekdays">
         {Array.from({ length: 7 }, (_, i) => (
-          <span key={i}>{weekdayName(weekStartDay + i)}</span>
+          <span key={i} className={(weekStartDay + i) % 7 === 6 ? "sat" : (weekStartDay + i) % 7 === 0 ? "sun" : ""}>{weekdayName(weekStartDay + i)}</span>
         ))}
       </div>
       <div className="month-grid" style={{ gridTemplateRows: `repeat(${weeks.length}, 1fr)` }}>
@@ -36,7 +36,7 @@ export default function MonthView({ anchor, weekStartDay, events, linked, todayK
             <button
               key={key}
               type="button"
-              className={`month-cell ${key.slice(0, 7) !== month ? "other" : ""} ${key === todayKey ? "today" : ""} ${holiday ? "holiday" : ""}`}
+              className={`month-cell ${weekendClass(key)} ${key.slice(0, 7) !== month ? "other" : ""} ${key === todayKey ? "today" : ""} ${holiday ? "holiday" : ""}`}
               onClick={() => onOpenDay(key)}
               aria-label={`${key}${holiday ? `（${holiday}）` : ""}の日表示へ`}
             >

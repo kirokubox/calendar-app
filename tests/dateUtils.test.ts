@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  addDays, addMinutes, diffMinutes, floorTo, formatDayLabel, isDateKey, isLocalDateTime, localFromMinutes, minutesToTime, roundTo, timeToMinutes, toLocal,
+  addDays, addMinutes, diffMinutes, floorTo, formatDayLabel, isDateKey, isLocalDateTime, localFromMinutes, minutesToTime, roundTo, timeToMinutes, toLocal, weekendClass,
 } from "../src/dateUtils.js";
 import { colorHex, textColorOn } from "../src/colors.js";
 
@@ -54,4 +54,10 @@ test("文字色：黄色には黒、濃い色には白", () => {
   assert.equal(textColorOn(colorHex("11")), "#ffffff");
   assert.equal(textColorOn(colorHex(null)), "#ffffff");
   assert.equal(textColorOn(colorHex("2")), "#ffffff");
+});
+
+test("曜日の色分けクラス：土＝sat、日＝sun、平日は空", () => {
+  assert.equal(weekendClass("2026-10-10"), "sat");
+  assert.equal(weekendClass("2026-10-11"), "sun");
+  assert.equal(weekendClass("2026-10-12"), "");
 });

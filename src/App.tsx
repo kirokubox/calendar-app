@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
 import {
-  addDays, addMonths, dateKeyOf, formatDayLabel, formatMonthLabel, formatWeekRangeLabel, startOfMonth, startOfWeek, toLocal, weekDayKeys,
+  addDays, addMonths, dateKeyOf, formatDayLabel, weekendClass, formatMonthLabel, formatWeekRangeLabel, startOfMonth, startOfWeek, toLocal, weekDayKeys,
 } from "./dateUtils";
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
 import { allDayEventsOn } from "./layout";
@@ -419,7 +419,7 @@ export default function App() {
         <div className="topbar-row">
           <button type="button" className="icon-btn" aria-label={`前の${stepName}`} onClick={() => step(-1)}>◀</button>
           <label className="date-jump" title="日付を選ぶ">
-            <span className={`date-label ${viewMode === "week" ? "small" : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
+            <span className={`date-label ${viewMode === "week" ? "small" : ""} ${viewMode === "day" ? weekendClass(dayKey) : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
             <input
               type="date"
               value={dayKey}

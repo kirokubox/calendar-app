@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { WEEK_HOUR_HEIGHT } from "./constants";
-import { parseDateKey, weekdayName } from "./dateUtils";
+import { parseDateKey, weekdayName, weekendClass } from "./dateUtils";
 import { rangeFromTap, type Range } from "./eventLogic";
 import { holidayName, shortHolidayName } from "./holidays";
 import { allDayEventsOn } from "./layout";
@@ -54,7 +54,7 @@ export default function WeekView({ dayKeys, events, labelsByEvent, linked, nowLo
             <button
               key={c.key}
               type="button"
-              className={`week-day-head ${c.key === todayKey ? "today" : ""} ${holiday ? "holiday" : ""}`}
+              className={`week-day-head ${weekendClass(c.key)} ${c.key === todayKey ? "today" : ""} ${holiday ? "holiday" : ""}`}
               onClick={() => onOpenDay(c.key)}
               aria-label={`${c.key}${holiday ? `（${holiday}）` : ""}の日表示へ`}
               title={holiday ?? undefined}

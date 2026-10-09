@@ -114,6 +114,12 @@ export function weekdayName(index: number): string {
   return WEEKDAY_NAMES[((index % 7) + 7) % 7];
 }
 
+/** 曜日の色分け用のクラス名：土＝sat、日＝sun、平日＝空 */
+export function weekendClass(key: string): string {
+  const d = parseDateKey(key).getDay();
+  return d === 6 ? "sat" : d === 0 ? "sun" : "";
+}
+
 /** 週の始まりの曜日（0=日〜6=土）に合わせた、その日を含む週の初日 */
 export function startOfWeek(key: string, weekStartDay: number): string {
   const back = (parseDateKey(key).getDay() - weekStartDay + 7) % 7;
