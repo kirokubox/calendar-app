@@ -3,11 +3,10 @@ import test from "node:test";
 import { monthCellItems } from "../src/eventLogic.js";
 import { eventDefaults } from "../src/migrate.js";
 import {
-  applyCancel, applyUncancel, buildAsPlanned, buildRevision, diffSnapshots, generateRecurrenceEvents, isLinkedPlan, isUnconfirmed,
-  layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, reconcileRecurrenceRule, removableFutureOccurrences, revisionsOfPlan,
-  shouldRecordRevision, snapshotOf, unlinkActuals, validateRule,
+  applyCancel, applyUncancel, buildAsPlanned, buildRevision, diffSnapshots, isLinkedPlan, isUnconfirmed,
+  layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, revisionsOfPlan, shouldRecordRevision, snapshotOf, unlinkActuals,
 } from "../src/planLogic.js";
-import type { CalendarEvent, Nagara, RecurrenceRule } from "../src/types.js";
+import type { CalendarEvent, Nagara } from "../src/types.js";
 
 function ev(id: string, title: string, start: string, end: string, extra: Partial<CalendarEvent> = {}): CalendarEvent {
   return { id, title, start, end, allDay: false, colorId: null, kind: "plan", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...eventDefaults(), ...extra };
@@ -138,76 +137,4 @@ test("キャンセルと取り消し・履歴の取り出し・削除時のリ�
   assert.deepEqual(unlinked.map((e) => [e.id, e.planId]), [["a1", null]]);
   assert.equal(planLabel(plan), "会議 10:00–11:00");
   assert.equal(planLabel(ev("p", "旅行", "2026-10-08T00:00", "2026-10-09T00:00", { allDay: true })), "旅行 終日");
-});
-
-function rule(extra: Partial<RecurrenceRule> = {}): RecurrenceRule {
-  return { id: "r1", title: "仕事", colorId: "11", startTime: "09:00", endTime: "18:00", weekdays: [1, 2, 3, 4, 5], startDate: "2026-10-01", endDate: null, active: true, generatedDates: [], ...extra };
-}
-
-test("繰り返し生成：今日から56日先までの該当曜日（2026-10-08は木曜）", () => {
-  const { events, rules } = generateRecurrenceEvents([rule()], "2026-10-08", "stamp", idMaker());
-  // 10/8(木)〜12/3(木) の平日。8週ぶん＝40日 + 当日側の端数を数える
-  const days = events.map((e) => e.recurrenceDate as string);
-  assert.equal(days[0], "2026-10-08");
-  assert.equal(days[days.length - 1], "2026-12-03");
-  assert.ok(days.every((d) => { const w = new Date(`${d}T00:00:00`).getDay(); return w >= 1 && w <= 5; }));
-  assert.equal(events.length, 41);
-  assert.ok(!days.includes("2026-10-10") && !days.includes("2026-10-11"));
-  const e = events[0];
-  assert.deepEqual([e.kind, e.title, e.colorId, e.start, e.end, e.recurrenceId, e.status], ["plan", "仕事", "11", "2026-10-08T09:00", "2026-10-08T18:00", "r1", "active"]);
-  assert.equal(new Set(events.map((x) => x.id)).size, events.length, "idは重複しない");
-  assert.equal(rules.length, 1);
-  assert.deepEqual(rules[0].generatedDates, days);
-});
-
-test("繰り返し生成：記録済みの日付は作らない（削除しても復活しない）・二度目は何も作らない", () => {
-  const first = generateRecurrenceEvents([rule()], "2026-10-08", "s", idMaker());
-  // 利用者が 10/9 の予定を削除した想定：generatedDates は残ったまま
-  const again = generateRecurrenceEvents(first.rules, "2026-10-08", "s", idMaker());
-  assert.deepEqual(again.events, []);
-  assert.deepEqual(again.rules, []);
-  // 翌日になると、新しく範囲に入った日だけ作る
-  const nextDay = generateRecurrenceEvents(first.rules, "2026-10-09", "s", idMaker());
-  assert.deepEqual(nextDay.events.map((e) => e.recurrenceDate), ["2026-12-04"]);
-});
-
-test("繰り返し生成：開始日・終了日・停止・曜日指定・終了が開始以前なら翌日終了", () => {
-  const limited = generateRecurrenceEvents([rule({ startDate: "2026-10-12", endDate: "2026-10-14" })], "2026-10-08", "s", idMaker());
-  assert.deepEqual(limited.events.map((e) => e.recurrenceDate), ["2026-10-12", "2026-10-13", "2026-10-14"]);
-  assert.deepEqual(generateRecurrenceEvents([rule({ active: false })], "2026-10-08", "s", idMaker()).events, []);
-  const sat = generateRecurrenceEvents([rule({ weekdays: [6] })], "2026-10-08", "s", idMaker(), 7);
-  assert.deepEqual(sat.events.map((e) => e.recurrenceDate), ["2026-10-10"]);
-  const night = generateRecurrenceEvents([rule({ startTime: "22:00", endTime: "06:00", weekdays: [4] })], "2026-10-08", "s", idMaker(), 0);
-  assert.deepEqual([night.events[0].start, night.events[0].end], ["2026-10-08T22:00", "2026-10-09T06:00"]);
-  const same = generateRecurrenceEvents([rule({ startTime: "22:00", endTime: "22:00", weekdays: [4] })], "2026-10-08", "s", idMaker(), 0);
-  assert.equal(same.events[0].end, "2026-10-09T22:00");
-  // 他のルールとは独立
-  const two = generateRecurrenceEvents([rule(), rule({ id: "r2", title: "別", weekdays: [4] })], "2026-10-08", "s", idMaker(), 0);
-  assert.deepEqual(two.events.map((e) => e.recurrenceId), ["r1", "r2"]);
-});
-
-test("ルールの検証", () => {
-  const ok = { title: "仕事", startTime: "09:00", endTime: "18:00", weekdays: [1], startDate: "2026-10-01", endDate: null };
-  assert.equal(validateRule(ok), null);
-  assert.notEqual(validateRule({ ...ok, title: " " }), null);
-  assert.notEqual(validateRule({ ...ok, weekdays: [] }), null);
-  assert.notEqual(validateRule({ ...ok, startDate: "" }), null);
-  assert.notEqual(validateRule({ ...ok, endDate: "2026-09-30" }), null);
-  assert.equal(validateRule({ ...ok, startTime: "22:00", endTime: "06:00" }), null);
-});
-
-test("繰り返し編集：未来の未編集予定だけ更新し、個別編集・リンク・キャンセル・削除済み日を保護", () => {
-  const old = rule({ generatedDates: ["2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14"] });
-  const generated = ev("g", "仕事", "2026-10-08T09:00", "2026-10-08T18:00", { recurrenceId: old.id, recurrenceDate: "2026-10-08" });
-  const linkedPlan = ev("l", "仕事", "2026-10-09T09:00", "2026-10-09T18:00", { recurrenceId: old.id, recurrenceDate: "2026-10-09" });
-  const edited = ev("e", "個別", "2026-10-12T10:00", "2026-10-12T18:00", { recurrenceId: old.id, recurrenceDate: "2026-10-12", updatedAt: "2026-10-02T00:00:00.000Z" });
-  const cancelled = ev("c", "仕事", "2026-10-13T09:00", "2026-10-13T18:00", { recurrenceId: old.id, recurrenceDate: "2026-10-13", status: "cancelled" });
-  const actual = ev("a", "仕事", "2026-10-09T09:00", "2026-10-09T18:00", { kind: "actual", planId: linkedPlan.id });
-  const next = rule({ title: "勤務", startTime: "09:30", endTime: "17:30", weekdays: [4, 5], generatedDates: old.generatedDates });
-  const r = reconcileRecurrenceRule(old, next, [generated, linkedPlan, edited, cancelled, actual], "2026-10-08", "stamp", idMaker(), 7);
-  assert.equal(r.putEvents.find((x) => x.id === "g")?.title, "勤務");
-  assert.equal(r.putEvents.find((x) => x.id === "g")?.start, "2026-10-08T09:30");
-  assert.ok(!r.putEvents.some((x) => x.id === "l" || x.id === "e" || x.id === "c"));
-  assert.ok(!r.putEvents.some((x) => x.recurrenceDate === "2026-10-14"), "削除済み日は復活しない");
-  assert.deepEqual(removableFutureOccurrences(old.id, [linkedPlan, edited, cancelled, actual], "2026-10-08"), [], "リンク済み・編集済み・キャンセル済みは削除対象外");
 });

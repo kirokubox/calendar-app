@@ -267,3 +267,23 @@ test("新規アプリ記録だけ区分化し、仕事は定時2区間と残業�
   const stacks = stackedBarSeries(s, { type: "parent", name: "仕事" }, settings);
   assert.deepEqual(stacks[1].segments.map((x) => x.label).sort(), ["定時", "残業"]);
 });
+
+test("祝日の仕事は休日出勤。細分類なしの行は、同じ色に別の細分類があるときだけ「（細分類なし）」と表示し、合算しない", () => {
+  const events = [
+    ev("holiday", "仕事", "2026-10-12T09:00", "2026-10-12T12:00", { colorId: "11", source: "app" }),
+    ev("g-sleep", "睡眠", "2026-10-12T00:00", "2026-10-12T06:00", { colorId: "1", source: "google" }),
+    ev("a-sleep", "睡眠", "2026-10-13T00:00", "2026-10-13T06:00", { colorId: "1", source: "app" }),
+    ev("g-life", "生活", "2026-10-13T07:00", "2026-10-13T08:00", { colorId: "3", source: "google" }),
+  ];
+  const week = periodOf("week", "2026-10-12", 1);
+  const s = computeReview(events, [], week);
+  const details = Object.fromEntries(Object.entries(s.byDetail).map(([k, v]) => [k.split(" ")[1] || `(${k.split(" ")[0]})`, v]));
+  assert.equal(details["休日出勤"], 180);
+  const bd = buildBreakdown(s, settings);
+  const sleep = bd.parents.find((p) => p.name === "睡眠");
+  assert.deepEqual(sleep?.children.map((c) => [c.name, c.minutes]).sort(), [["睡眠", 360], ["睡眠（細分類なし）", 360]]);
+  const life = bd.parents.find((p) => p.name === "生活");
+  assert.deepEqual(life?.children.map((c) => c.name), ["生活"], "比べる相手がなければ色カテゴリ名のまま");
+  const rows = buildDiffRows(s, computeReview([], [], shiftPeriod(week, -1), false), settings);
+  assert.ok(rows.some((r) => r.name === "睡眠（細分類なし）" && r.depth === 1));
+});

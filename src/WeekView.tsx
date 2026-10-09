@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { WEEK_HOUR_HEIGHT } from "./constants";
 import { parseDateKey, weekdayName } from "./dateUtils";
 import { rangeFromTap, type Range } from "./eventLogic";
+import { holidayName, shortHolidayName } from "./holidays";
 import { allDayEventsOn } from "./layout";
 import { isUnconfirmed, layoutDayWithPlans } from "./planLogic";
 import EventBlock, { eventStyle } from "./EventBlock";
@@ -47,11 +48,21 @@ export default function WeekView({ dayKeys, events, labelsByEvent, linked, nowLo
     <>
       <div className="week-head">
         <span className="week-gutter" />
-        {columns.map((c) => (
-          <button key={c.key} type="button" className={`week-day-head ${c.key === todayKey ? "today" : ""}`} onClick={() => onOpenDay(c.key)} aria-label={`${c.key}の日表示へ`}>
-            <span>{Number(c.key.slice(8, 10))}</span><small>{weekdayName(parseDateKey(c.key).getDay())}</small>
-          </button>
-        ))}
+        {columns.map((c) => {
+          const holiday = holidayName(c.key);
+          return (
+            <button
+              key={c.key}
+              type="button"
+              className={`week-day-head ${c.key === todayKey ? "today" : ""} ${holiday ? "holiday" : ""}`}
+              onClick={() => onOpenDay(c.key)}
+              aria-label={`${c.key}${holiday ? `（${holiday}）` : ""}の日表示へ`}
+              title={holiday ?? undefined}
+            >
+              <span>{Number(c.key.slice(8, 10))}</span><small>{holiday ? shortHolidayName(holiday) : weekdayName(parseDateKey(c.key).getDay())}</small>
+            </button>
+          );
+        })}
       </div>
       {hasAllDay && (
         <div className="week-head week-allday">

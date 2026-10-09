@@ -75,5 +75,6 @@ export function migrateSettings(raw: unknown): Settings {
       if (typeof v === "string" && (PARENT_CATEGORIES as string[]).includes(v)) categoryParents[key] = v as ParentCategory;
     }
   }
-  return { schemaVersion: 2, colorLabels, weekStartDay, categoryParents };
+  const startView = raw.startView === "day" || raw.startView === "week" || raw.startView === "month" ? raw.startView : base.startView;
+  return { schemaVersion: 2, colorLabels, weekStartDay, categoryParents, startView };
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { addChipValue, moveItem } from "./eventLogic";
+import { addChipValue, moveItem, quickCandidates } from "./eventLogic";
 
 interface Props {
   label: string;
@@ -10,10 +10,12 @@ interface Props {
   /** 順番を上下で入れ替えられるか（場所） */
   reorderable?: boolean;
   listId: string;
+  /** 固定候補（履歴候補より先に出す） */
+  fixed?: string[];
 }
 
 /** 人・場所の入力：入力して追加するチップ式。候補はdatalistと、よく使うもののワンタップ追加で出す */
-export default function ChipInput({ label, values, onChange, suggestions, placeholder, reorderable, listId }: Props) {
+export default function ChipInput({ label, values, onChange, suggestions, placeholder, reorderable, listId, fixed = [] }: Props) {
   const [text, setText] = useState("");
 
   const add = (value: string) => {
@@ -21,7 +23,7 @@ export default function ChipInput({ label, values, onChange, suggestions, placeh
     setText("");
   };
 
-  const quick = suggestions.filter((s) => !values.includes(s)).slice(0, 6);
+  const quick = quickCandidates(fixed, suggestions, values);
 
   return (
     <div className="chip-input">

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { eventStyle } from "./EventBlock";
 import { monthGridWeeks, weekdayName } from "./dateUtils";
 import { displayTitle, monthCellItems } from "./eventLogic";
+import { holidayName } from "./holidays";
 import type { CalendarEvent } from "./types";
 
 interface Props {
@@ -30,15 +31,16 @@ export default function MonthView({ anchor, weekStartDay, events, linked, todayK
       <div className="month-grid" style={{ gridTemplateRows: `repeat(${weeks.length}, 1fr)` }}>
         {weeks.map((week) => week.map((key) => {
           const { shown, more } = monthCellItems(events, key, 3, linked);
+          const holiday = holidayName(key);
           return (
             <button
               key={key}
               type="button"
-              className={`month-cell ${key.slice(0, 7) !== month ? "other" : ""} ${key === todayKey ? "today" : ""}`}
+              className={`month-cell ${key.slice(0, 7) !== month ? "other" : ""} ${key === todayKey ? "today" : ""} ${holiday ? "holiday" : ""}`}
               onClick={() => onOpenDay(key)}
-              aria-label={`${key}の日表示へ`}
+              aria-label={`${key}${holiday ? `（${holiday}）` : ""}の日表示へ`}
             >
-              <span className="month-num">{Number(key.slice(8, 10))}</span>
+              <span className="month-num">{Number(key.slice(8, 10))}{holiday && <small className="month-holiday">{holiday}</small>}</span>
               {shown.map((e) => (
                 <span key={e.id} className={`month-item ${e.kind === "plan" ? "plan" : ""}`} style={eventStyle(e)}>{displayTitle(e)}</span>
               ))}

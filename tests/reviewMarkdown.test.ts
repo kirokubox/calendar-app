@@ -32,19 +32,19 @@ test("週のMarkdown：5ブロックの構成・エスケープ・主行動な�
   ];
   const md = buildReviewMarkdown({ events, nagara, revisions: [], settings: defaultSettings(), period, nowLocal: "2026-10-20T09:00" });
   const headings = md.split("\n").filter((l) => l.startsWith("## ") || l.startsWith("# "));
-  assert.deepEqual(headings.map((h) => h.slice(0, 7)), ["# カレンダー", "## 1. 時間", "## 2. なが", "## 3. 未確", "## 4. キャ", "## 5. 日ご"].map((x) => x.slice(0, 7)));
+  assert.deepEqual(headings.map((h) => h.slice(0, 7)), ["# カレンダー", "## 1. 時間", "## 2. なが", "## 3. 予定", "## 4. キャ", "## 5. 日ご"].map((x) => x.slice(0, 7)));
   assert.ok(md.includes("散歩\\|外食"), "タイトルの | をエスケープ");
   assert.ok(md.includes("1行目<br>2行目"), "メモの改行をエスケープ");
   assert.ok(md.includes("主行動なし"), "主行動のない時間のながら");
   assert.ok(md.includes("| カフェ | 1時間 |"), "場所の表");
-  assert.ok(md.includes("予定（キャンセル）"));
+  assert.ok(md.includes("キャンセルした予定（1件）") && md.includes("| 中止 | 雨 |"), "キャンセルは4節に残る");
   assert.ok(md.includes("未確定の予定（2件）"), "会議と終日の予定が未確定");
   assert.ok(md.includes("### 2026-10-05"));
   assert.ok(md.includes("### 2026-10-11"));
   assert.ok(!md.includes("今日以降の分も未記録"), "期間が過去なら注記しない");
   const detail = md.split("\n").filter((l) => l.startsWith("| 10:00–12:00"));
   assert.equal(detail.length, 1);
-  assert.equal(detail[0].replace(/\\\|/g, "").split("|").length, 10, "8列＋両端");
+  assert.equal(detail[0].replace(/\\\|/g, "").split("|").length, 11, "9列＋両端");
 });
 
 test("月のMarkdown：日数ぶんの見出しと、未来を分母へ含めない注記", () => {
@@ -53,4 +53,22 @@ test("月のMarkdown：日数ぶんの見出しと、未来を分母へ含めな
   assert.equal(md.split("\n").filter((l) => l.startsWith("### 2026-10-")).length, 31);
   assert.ok(md.includes("現在時刻までを分母"));
   assert.ok(md.includes("# カレンダー 月次レポート"));
+});
+
+test("Markdown：明細は実績だけ。予定は未確定・これからの節へ分け、実績の「予定」列で対応を残す", () => {
+  const period = periodOf("week", "2026-10-08", 1);
+  const events = [
+    ev("plan1", "仕事", "2026-10-06T09:00", "2026-10-06T12:00", { kind: "plan", colorId: "11" }),
+    ev("act1", "試験まとめ", "2026-10-06T09:00", "2026-10-06T12:00", { colorId: "11", planId: "plan1" }),
+    ev("plan2", "通勤", "2026-10-07T07:25", "2026-10-07T08:45", { kind: "plan", colorId: "3" }),
+    ev("plan3", "デート", "2026-10-10T14:00", "2026-10-10T21:00", { kind: "plan", colorId: "5" }),
+  ];
+  const md = buildReviewMarkdown({ events, nagara: [], revisions: [], settings: defaultSettings(), period, nowLocal: "2026-10-09T21:00" });
+  const detail = md.slice(md.indexOf("## 5. 日ごとの明細"));
+  assert.ok(detail.includes("試験まとめ"));
+  assert.ok(!detail.includes("デート") && !detail.includes("| 通勤"), "予定は明細に出さない");
+  assert.ok(detail.includes("仕事 09:00–12:00"), "対応する予定を予定列に出す");
+  assert.ok(md.includes("### 未確定の予定（1件）") && md.includes("2026-10-07 07:25〜08:45 | 通勤"));
+  assert.ok(md.includes("### これからの予定（1件）") && md.includes("デート"));
+  assert.ok(md.includes("## 1. 時間構成（親カテゴリ → 細分類）"));
 });

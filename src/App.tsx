@@ -6,15 +6,20 @@ import {
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
 import { allDayEventsOn } from "./layout";
 import {
-  applyCancel, applyUncancel, buildAsPlanned, buildRevision, generateRecurrenceEvents, isUnconfirmed, layoutDayWithPlans, linkedPlanIds,
-  reconcileRecurrenceRule, removableFutureOccurrences, revisionsOfPlan, shouldRecordRevision, unlinkActuals,
+  applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, revisionsOfPlan,
+  shouldRecordRevision, unlinkActuals,
 } from "./planLogic";
+import {
+  LARGE_GENERATION_THRESHOLD, generateMissing, newRuleDefaults, normalizeRule, reconcileRule, removableFutureOccurrences, ruleContentFromEvent,
+  splitRuleFrom, withRemovedDate,
+} from "./recurrence";
+import { holidayName } from "./holidays";
 import { buildNagaraSave, layoutSessions, nagaraIdsOfEvent, nagaraLabelMap, sessionSegmentsForDay, type NagaraDraft } from "./nagaraLogic";
 import {
   commitChanges, deleteNagara, getAllEvents, getAllNagara, getAllRecurrences, getAllRevisions, getSettings, newId, putNagara,
   requestPersistentStorage, restoreAll, saveSettings, type Changes,
 } from "./storage";
-import EventModal, { type ModalTab } from "./EventModal";
+import EventModal, { type EditScope, type ModalTab } from "./EventModal";
 import EventBlock, { eventStyle } from "./EventBlock";
 import MonthView from "./MonthView";
 import ReviewView from "./ReviewView";
@@ -29,6 +34,7 @@ type ModalState =
   | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent }
   | { mode: "edit"; event: CalendarEvent }
   | { mode: "session"; session: Nagara }
+  | { mode: "rule"; rule: RecurrenceRule }
   | null;
 
 const VIEW_LABEL: Record<ViewMode, string> = { day: "日", week: "週", month: "月" };
@@ -43,7 +49,8 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [now, setNow] = useState(() => new Date());
   const [dayKey, setDayKey] = useState(() => dateKeyOf(new Date()));
-  const [viewMode, setViewMode] = useState<ViewMode>("day");
+  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [ruleMessage, setRuleMessage] = useState("");
   const [view, setView] = useState<"calendar" | "settings" | "review">("calendar");
   const [reviewKind, setReviewKind] = useState<PeriodKind>("week");
   const [reviewAnchor, setReviewAnchor] = useState(() => dateKeyOf(new Date()));
@@ -52,6 +59,8 @@ export default function App() {
   const areaRef = useRef<HTMLDivElement>(null);
   const laneRef = useRef<HTMLDivElement>(null);
   const recurrenceDone = useRef(false);
+  /** 読み込み時に旧形式から補った（保存し直す）ルール */
+  const migratedRuleIds = useRef<Set<string>>(new Set());
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const nowLocal = toLocal(now);
@@ -65,20 +74,28 @@ export default function App() {
         setEvents(evs);
         setNagara(ng);
         setRevisions(revs);
-        setRecurrences(recs);
+        // 旧版のルールは既定値を補い、墓標（本人が消した日）を導出する
+        const normalized = recs.map((r) => normalizeRule(r as unknown as Record<string, unknown>, evs));
+        migratedRuleIds.current = new Set(normalized.filter((n) => n.migrated).map((n) => n.rule.id));
+        setRecurrences(normalized.map((n) => n.rule));
         setSettings(st);
+        setViewMode(st.startView);
         setLoaded(true);
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "データを読み込めませんでした"));
   }, []);
 
-  // 起動時に、有効な繰り返しルールの予定を先読み分だけ生成する（1回だけ）
+  // 起動時に、有効な繰り返しルールの足りない予定を終了日まで作る（1回だけ）。旧形式のルールはここで保存し直す
   useEffect(() => {
     if (!loaded || recurrenceDone.current) return;
     recurrenceDone.current = true;
-    const gen = generateRecurrenceEvents(recurrences, dateKeyOf(new Date()), new Date().toISOString(), newId);
-    if (gen.events.length === 0 && gen.rules.length === 0) return;
-    const changes: Changes = { putEvents: gen.events, putRecurrences: gen.rules };
+    const gen = generateMissing(recurrences, events, nagara, dateKeyOf(new Date()), new Date().toISOString(), newId);
+    const changedIds = new Set(gen.putRules.map((r) => r.id));
+    const putRecurrences = [...gen.putRules, ...recurrences.filter((r) => !changedIds.has(r.id) && migratedRuleIds.current.has(r.id))];
+    if (putRecurrences.length === 0 && gen.putEvents.length === 0) return;
+    const changes: Changes = {
+      putEvents: gen.putEvents, deleteEventIds: gen.deleteEventIds, putNagara: gen.putNagara, deleteNagaraIds: gen.deleteNagaraIds, putRecurrences,
+    };
     commitChanges(changes).then(() => applyChanges(changes)).catch(() => { recurrenceDone.current = false; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
@@ -157,7 +174,8 @@ export default function App() {
     const putR = c.putRevisions ?? [];
     if (delR.size > 0 || putR.length > 0) setRevisions((prev) => [...prev.filter((r) => !delR.has(r.id) && !putR.some((p) => p.id === r.id)), ...putR]);
     const putC = c.putRecurrences ?? [];
-    if (putC.length > 0) setRecurrences((prev) => [...prev.filter((r) => !putC.some((p) => p.id === r.id)), ...putC]);
+    const delC = new Set(c.deleteRecurrenceIds ?? []);
+    if (putC.length > 0 || delC.size > 0) setRecurrences((prev) => [...prev.filter((r) => !delC.has(r.id) && !putC.some((p) => p.id === r.id)), ...putC]);
   };
 
   const commit = async (c: Changes) => {
@@ -165,12 +183,26 @@ export default function App() {
     applyChanges(c);
   };
 
-  const handleSave = async (event: CalendarEvent, drafts: NagaraDraft[]) => {
+  const handleSave = async (event: CalendarEvent, drafts: NagaraDraft[], scope: EditScope) => {
     const stamp = new Date().toISOString();
     const { put, deleteIds } = buildNagaraSave(event.id, drafts, nagara, stamp, newId);
     const before = events.find((e) => e.id === event.id);
     // 予定の内容が変わったら、変更前の状態を履歴に残す
     const putRevisions = before && shouldRecordRevision(before, event) ? [buildRevision(before, stamp, newId)] : [];
+    const rule = scope === "following" ? recurrences.find((r) => r.id === event.recurrenceId) : undefined;
+    if (rule && event.recurrenceDate) {
+      // この日以降：ルールを分割し、押した予定はルールに沿った予定として保存する
+      const content = ruleContentFromEvent(event, drafts.filter((d) => d.start === null).map((d) => d.label));
+      const split = splitRuleFrom(rule, event.recurrenceDate, content, event, events, nagara, dateKeyOf(new Date()), stamp, newId);
+      const saved: CalendarEvent = { ...event, recurrenceId: split.ruleId, createdAt: stamp, updatedAt: stamp };
+      await commit({
+        putEvents: [...split.putEvents, saved], deleteEventIds: split.deleteEventIds,
+        putNagara: [...split.putNagara, ...put], deleteNagaraIds: [...split.deleteNagaraIds, ...deleteIds],
+        putRevisions, putRecurrences: split.putRules,
+      });
+      setModal(null);
+      return;
+    }
     await commit({ putEvents: [event], putNagara: put, deleteNagaraIds: deleteIds, putRevisions });
     setModal(null);
   };
@@ -178,7 +210,11 @@ export default function App() {
   /** イベント削除：付随するながら・変更履歴も削除し、この予定を指していた実績の planId を外す */
   const handleDelete = async (id: string) => {
     const stamp = new Date().toISOString();
+    const target = events.find((e) => e.id === id);
+    const rule = target?.recurrenceId ? recurrences.find((r) => r.id === target.recurrenceId) : undefined;
     await commit({
+      // 繰り返しの予定を手で消した日は墓標にして、作り直さない
+      putRecurrences: rule && target?.recurrenceDate ? [withRemovedDate(rule, target.recurrenceDate)] : [],
       deleteEventIds: [id],
       deleteNagaraIds: nagaraIdsOfEvent(nagara, id),
       deleteRevisionIds: revisions.filter((r) => r.planId === id).map((r) => r.id),
@@ -207,22 +243,30 @@ export default function App() {
     setModal(null);
   };
 
-  /** 繰り返しルールの保存。今日以降の未編集予定へ安全に反映する */
-  const handleSaveRecurrence = async (rule: RecurrenceRule) => {
-    const old = recurrences.find((r) => r.id === rule.id);
-    // 「停止」は新規生成だけを止め、すでに作った予定は従来どおり残す。
-    if (old?.active && !rule.active) {
-      await commit({ putRecurrences: [rule] });
+  /** 繰り返しルールの保存（追加・編集・再開）。今日以降の未保護の予定へ反映し、終了日まで作る */
+  const handleSaveRule = async (rule: RecurrenceRule) => {
+    const c = reconcileRule(rule, events, nagara, dateKeyOf(new Date()), new Date().toISOString(), newId);
+    if (c.created > LARGE_GENERATION_THRESHOLD && !window.confirm(`${c.created}件の予定を作ります。よろしいですか？`)) return;
+    await commit({ putRecurrences: c.putRules, putEvents: c.putEvents, deleteEventIds: c.deleteEventIds, putNagara: c.putNagara, deleteNagaraIds: c.deleteNagaraIds });
+    setRuleMessage(`保存しました（新しく${c.created}件、更新${c.putEvents.length - c.created}件、削除${c.deleteEventIds.length}件）`);
+    setModal(null);
+  };
+
+  /** 停止・再開。停止は新規生成だけを止め、すでに作った予定は残す */
+  const handleToggleRule = async (rule: RecurrenceRule) => {
+    if (rule.active) {
+      await commit({ putRecurrences: [{ ...rule, active: false }] });
+      setRuleMessage("停止しました（作成済みの予定はそのままです）");
       return;
     }
-    const next = reconcileRecurrenceRule(old, rule, events, dateKeyOf(new Date()), new Date().toISOString(), newId);
-    await commit({ putRecurrences: [next.rule], putEvents: next.putEvents, deleteEventIds: next.deleteEventIds });
+    await handleSaveRule({ ...rule, active: true });
   };
 
   const handleDeleteRecurrence = async (rule: RecurrenceRule, deleteFuture: boolean) => {
     const deleteEventIds = deleteFuture ? removableFutureOccurrences(rule.id, events, dateKeyOf(new Date())) : [];
-    await commit({ deleteRecurrenceIds: [rule.id], deleteEventIds });
-    setRecurrences((prev) => prev.filter((r) => r.id !== rule.id));
+    const ids = new Set(deleteEventIds);
+    await commit({ deleteRecurrenceIds: [rule.id], deleteEventIds, deleteNagaraIds: nagara.filter((n) => n.eventId !== null && ids.has(n.eventId)).map((n) => n.id) });
+    setRuleMessage(deleteFuture ? "ルールと未来の未編集予定を削除しました" : "ルールだけ削除しました");
   };
 
   /** Googleカレンダーの取り込み：新規・更新を1トランザクションでまとめて保存する */
@@ -292,8 +336,11 @@ export default function App() {
 
   const modalEl = modal && (
       <EventModal
-        key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : `new-${modal.range.start}-${modal.template?.id ?? ""}`}
+        key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : modal.mode === "rule" ? `rule-${modal.rule.id}` : `new-${modal.range.start}-${modal.template?.id ?? ""}`}
         mode={modal.mode}
+        rule={modal.mode === "rule" ? modal.rule : null}
+        occurrenceRule={modal.mode === "edit" && modal.event.recurrenceId ? recurrences.find((r) => r.id === modal.event.recurrenceId) ?? null : null}
+        onSaveRule={handleSaveRule}
         event={modal.mode === "edit" ? modal.event : null}
         session={modal.mode === "session" ? modal.session : null}
         range={modal.mode === "new" ? modal.range : null}
@@ -346,18 +393,23 @@ export default function App() {
           nagara={nagara}
           revisions={revisions}
           recurrences={recurrences}
-          onBack={() => setView("calendar")}
+          ruleMessage={ruleMessage}
+          onBack={() => { setRuleMessage(""); setView("calendar"); }}
           onSaveSettings={handleSaveSettings}
-          onSaveRecurrence={handleSaveRecurrence}
+          onAddRule={() => { setRuleMessage(""); setModal({ mode: "rule", rule: newRuleDefaults(newId(), dateKeyOf(new Date())) }); }}
+          onEditRule={(rule) => { setRuleMessage(""); setModal({ mode: "rule", rule }); }}
+          onToggleRule={handleToggleRule}
           onDeleteRecurrence={handleDeleteRecurrence}
           onRestore={handleRestore}
           onImportGoogle={handleImportGoogle}
         />
+        {modalEl}
       </div>
     );
   }
 
   const nowMin = now.getHours() * 60 + now.getMinutes();
+  const dayHoliday = viewMode === "day" ? holidayName(dayKey) : null;
   const headLabel = viewMode === "day" ? formatDayLabel(dayKey) : viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay) : formatMonthLabel(dayKey);
   const stepName = VIEW_LABEL[viewMode];
 
@@ -367,7 +419,7 @@ export default function App() {
         <div className="topbar-row">
           <button type="button" className="icon-btn" aria-label={`前の${stepName}`} onClick={() => step(-1)}>◀</button>
           <label className="date-jump" title="日付を選ぶ">
-            <span className={`date-label ${viewMode === "week" ? "small" : ""}`}>{headLabel}</span>
+            <span className={`date-label ${viewMode === "week" ? "small" : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
             <input
               type="date"
               value={dayKey}

@@ -78,7 +78,7 @@ export interface PlanRevision {
   snapshot: PlanSnapshot;
 }
 
-/** 繰り返しルール（平日の決まった枠） */
+/** 繰り返しルール（曜日を選んだ決まった枠） */
 export interface RecurrenceRule {
   id: string;
   title: string;
@@ -90,9 +90,23 @@ export interface RecurrenceRule {
   startDate: string;
   endDate: string | null;
   active: boolean;
-  /** 作成済みの日付。削除されても再生成しないために持つ */
+  /** 作成済みの日付（予定がある日＋本人が消した日）。旧版との互換のために持つ */
   generatedDates: string[];
+  // --- v0.3.0 で追加（無いデータは既定値で補う） ---
+  people: string[];
+  /** 順番を保持する */
+  places: string[];
+  subcategory: string | null;
+  memo: string;
+  /** イベント全体のながら（部分時間は持たない） */
+  nagaraLabels: string[];
+  /** 祝日を除外するか */
+  excludeHolidays: boolean;
+  /** 本人が手で消した日（墓標）。ルール変更で消えた日は含めない */
+  removedDates: string[];
 }
+
+export type StartView = "day" | "week" | "month";
 
 export type ParentCategory = "睡眠" | "生活" | "仕事" | "自由時間" | "その他";
 
@@ -104,6 +118,8 @@ export interface Settings {
   weekStartDay: number;
   /** 色キー → 親カテゴリ */
   categoryParents: Record<string, ParentCategory>;
+  /** 起動時の表示（既定は週） */
+  startView: StartView;
 }
 
 export interface BackupFile {

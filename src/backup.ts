@@ -1,6 +1,7 @@
 import { BACKUP_APP_NAME, COLOR_IDS } from "./constants.js";
 import { isLocalDateTime } from "./dateUtils.js";
 import { migrateEvent, migrateSettings } from "./migrate.js";
+import { normalizeRule } from "./recurrence.js";
 import type { BackupFile, CalendarEvent, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
 
 export interface BackupExtras {
@@ -125,11 +126,14 @@ function validateRecurrenceItem(v: unknown, index: number): string | RecurrenceR
   if (!isStrOrNull(v.endDate)) return `${at}.endDate が文字列または null ではありません`;
   if (typeof v.active !== "boolean") return `${at}.active が true/false ではありません`;
   if (!isStrArray(v.generatedDates)) return `${at}.generatedDates が文字列の配列ではありません`;
-  return {
-    id: v.id, title: v.title, colorId: v.colorId as string | null, startTime: v.startTime, endTime: v.endTime,
-    weekdays: v.weekdays as number[], startDate: v.startDate, endDate: v.endDate as string | null, active: v.active,
-    generatedDates: v.generatedDates as string[],
-  };
+  // v0.3.0 で追加した項目（無ければ既定値。あれば型を確かめる）
+  for (const k of ["people", "places", "nagaraLabels", "removedDates"]) {
+    if (v[k] !== undefined && !isStrArray(v[k])) return `${at}.${k} が文字列の配列ではありません`;
+  }
+  if (v.subcategory !== undefined && !isStrOrNull(v.subcategory)) return `${at}.subcategory が文字列または null ではありません`;
+  if (v.memo !== undefined && typeof v.memo !== "string") return `${at}.memo が文字列ではありません`;
+  if (v.excludeHolidays !== undefined && typeof v.excludeHolidays !== "boolean") return `${at}.excludeHolidays が true/false ではありません`;
+  return normalizeRule(v).rule;
 }
 
 function validateList<T>(
@@ -170,7 +174,8 @@ export function validateBackup(value: unknown): ValidationResult {
     if (!c.ok) return c;
     nagara = n.items;
     revisions = r.items;
-    recurrences = c.items;
+    // 墓標（removedDates）が無い旧形式は、同じバックアップのイベントから導出する
+    recurrences = (value.recurrences as Array<Record<string, unknown>>).map((raw) => normalizeRule(raw, ev.items).rule);
   }
   if (!isRecord(value.settings)) return { ok: false, reason: "settings がありません" };
   const labels = value.settings.colorLabels;
@@ -188,7 +193,7 @@ export function validateBackup(value: unknown): ValidationResult {
     sourceVersion,
     backup: {
       app: BACKUP_APP_NAME, schemaVersion: 2, exportedAt: value.exportedAt, events: ev.items, nagara, revisions, recurrences,
-      settings: { schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents },
+      settings: { schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents, startView: migrated.startView },
     },
   };
 }
@@ -227,5 +232,5 @@ export function mergeEvents(existing: CalendarEvent[], incoming: CalendarEvent[]
 /** 復元時に保存する設定。v1のバックアップは週の始まり・親カテゴリを持たないので、今の設定を残す */
 export function settingsForRestore(backup: BackupFile, sourceVersion: 1 | 2, current: Settings): Settings {
   if (sourceVersion === 2) return backup.settings;
-  return { ...backup.settings, weekStartDay: current.weekStartDay, categoryParents: current.categoryParents };
+  return { ...backup.settings, weekStartDay: current.weekStartDay, categoryParents: current.categoryParents, startView: current.startView };
 }

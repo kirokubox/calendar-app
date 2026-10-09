@@ -3,9 +3,10 @@ import { addDays, datePart, formatShortDate, minutesToTime } from "./dateUtils.j
 import { clipRangeToDay } from "./layout.js";
 import {
   buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, colorKeyOf, computeReview, equivalentPreviousCutoff, formatDuration, formatPercent, formatSigned, localFromIso, periodCutoff,
-  overlapsPeriod, parentOf, periodDays, periodLabel, planChangesInPeriod, shiftPeriod, unconfirmedInPeriod, type Period,
+  overlapsPeriod, parentOf, periodDays, periodLabel, planChangesInPeriod, shiftPeriod, unconfirmedInPeriod, upcomingInPeriod, type Period,
 } from "./reviewLogic.js";
 import { displayTitle } from "./eventLogic.js";
+import { planLabel } from "./planLogic.js";
 import type { CalendarEvent, Nagara, PlanRevision, Settings } from "./types.js";
 
 /** 表のセル用：`|` をエスケープし、改行は <br> にする */
@@ -65,11 +66,13 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
   out.push("  - 主行動が重なった時間は、同時にある件数で等分する（二重計上しない）");
   out.push("  - 記録のない経過時間は「未記録」。現在の期間は未来を除き、現在時刻までを分母にする");
   out.push("  - ながら・場所は主行動とは別の並行集計で、時間構成の合計には含めない");
+  out.push("  - 日ごとの明細は実績・不明とながら・場所セッションだけ。予定は「3. 予定」と「4. キャンセルと予定の変更」に分けて載せる（予定を実績として読まない）");
+  out.push("  - 明細の「予定」列は、その実績が対応する予定（予定通り・実績を入力で記録したもの）");
   out.push("  - 数値は事実の記録であり、良し悪しの評価は含まない");
   out.push("");
 
   // 2. 時間構成
-  out.push("## 1. 時間構成（親カテゴリ → 色カテゴリ）", "");
+  out.push("## 1. 時間構成（親カテゴリ → 細分類）", "");
   const diffRows = buildDiffRows(cur, prev, settings);
   const timeRows = diffRows.map((r) => {
     const name = r.depth === 1 ? `　└ ${r.name}` : r.name;
@@ -107,13 +110,22 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
 
   // 4. 未確定・キャンセル・変更
   const unconfirmed = unconfirmedInPeriod(events, period, nowLocal);
-  out.push(`## 3. 未確定の予定（${unconfirmed.length}件）`, "");
+  const upcoming = upcomingInPeriod(events, period, nowLocal);
+  const planTime = (e: CalendarEvent) => e.allDay
+    ? `${datePart(e.start)} 終日`
+    : `${e.start.replace("T", " ")}〜${datePart(e.end) === datePart(e.start) ? e.end.slice(11) : e.end.replace("T", " ")}`;
+  out.push("## 3. 予定（実績の明細とは別枠）", "");
+  out.push(`### 未確定の予定（${unconfirmed.length}件）`, "");
+  out.push("過ぎたのに、対応する実績がない予定。", "");
   out.push(
     ...(unconfirmed.length > 0
-      ? table(["日時", "タイトル"], unconfirmed.map((e) => [`${e.start.replace("T", " ")}〜${datePart(e.end) === datePart(e.start) ? e.end.slice(11) : e.end.replace("T", " ")}`, displayTitle(e)]))
+      ? table(["日時", "タイトル"], unconfirmed.map((e) => [planTime(e), displayTitle(e)]))
       : ["（なし）"]),
     "",
   );
+  out.push(`### これからの予定（${upcoming.length}件）`, "");
+  out.push("書き出し時点でまだ終わっていない予定。", "");
+  out.push(...(upcoming.length > 0 ? table(["日時", "タイトル"], upcoming.map((e) => [planTime(e), displayTitle(e)])) : ["（なし）"]), "");
   const cancelled = cancelledInPeriod(events, period);
   out.push(`## 4. キャンセルと予定の変更`, "");
   out.push(`### キャンセルした予定（${cancelled.length}件）`, "");
@@ -132,7 +144,9 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
 
   // 5. 日ごとの明細
   out.push("## 5. 日ごとの明細", "");
-  const inPeriod = events.filter((e) => overlapsPeriod(e.start, e.end, period));
+  // 明細は実績・不明だけ（予定は3・4節）。対応する予定は「予定」列で文脈として残す
+  const inPeriod = events.filter((e) => e.kind !== "plan" && overlapsPeriod(e.start, e.end, period));
+  const planById = new Map(events.filter((e) => e.kind === "plan").map((e) => [e.id, e]));
   const nagaraByEvent = new Map<string, Nagara[]>();
   const sessions: Nagara[] = [];
   for (const n of nagara) {
@@ -144,7 +158,7 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
       sessions.push(n);
     }
   }
-  const header = ["時刻", "種別", "カテゴリ", "人", "タイトル", "ながら", "場所", "メモ"];
+  const header = ["時刻", "種別", "カテゴリ", "人", "タイトル", "ながら", "場所", "メモ", "予定"];
   for (const day of periodDays(period)) {
     out.push(`### ${day} ${formatShortDate(day).replace(/^\d+\/\d+/, "")}`, "");
     const rows: Array<{ sort: number; cells: string[] }> = [];
@@ -169,13 +183,14 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
         sort,
         cells: [
           time, kindLabel(e), `${categoryName(key, settings)}（${parentOf(key, settings)}）`, e.people.join("・"), e.title, labels.join("、"), places.join(" → "), e.memo,
+          e.planId && planById.has(e.planId) ? planLabel(planById.get(e.planId) as CalendarEvent) : "",
         ],
       });
     }
     for (const n of sessions) {
       const r = clipRangeToDay(n.start as string, n.end as string, day);
       if (!r) continue;
-      rows.push({ sort: r.startMin, cells: [rangeCell(r), n.type === "place" ? "場所セッション" : "ながらセッション", "", "", n.label, "", "", ""] });
+      rows.push({ sort: r.startMin, cells: [rangeCell(r), n.type === "place" ? "場所セッション" : "ながらセッション", "", "", n.label, "", "", "", ""] });
     }
     rows.sort((a, b) => a.sort - b.sort);
     out.push(...(rows.length > 0 ? table(header, rows.map((r) => r.cells)) : ["（なし）"]), "");

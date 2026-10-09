@@ -156,6 +156,24 @@ export function placeSuggestions(events: CalendarEvent[], limit = 100): string[]
   return recentValues(events, (e) => e.places, limit);
 }
 
+/** 細分類の候補：入力履歴から新しい順（表記ゆれは統合しない） */
+export function subcategorySuggestions(events: CalendarEvent[], limit = 100): string[] {
+  return recentValues(events, (e) => (e.subcategory ? [e.subcategory] : []), limit);
+}
+
+/** ワンタップ候補：固定候補を先に、続けて履歴の新しい順。選択済みは除く */
+export function quickCandidates(fixed: string[], history: string[], selected: string[], historyCount = 5): string[] {
+  const out = fixed.filter((f) => !selected.includes(f));
+  let added = 0;
+  for (const h of history) {
+    if (added >= historyCount) break;
+    if (selected.includes(h) || out.includes(h) || fixed.includes(h)) continue;
+    out.push(h);
+    added++;
+  }
+  return out;
+}
+
 /** 月表示の1日ぶん：その日にかかるイベント（キャンセル・実績がリンクされた予定を除く）のうち最大 max 件と、残りの件数 */
 export function monthCellItems(
   events: CalendarEvent[],

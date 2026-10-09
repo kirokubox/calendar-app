@@ -5,7 +5,7 @@ import { dateKeyOf, weekdayName } from "./dateUtils";
 import AiMarkdownSettings from "./AiMarkdownSettings";
 import GoogleImportSettings from "./GoogleImportSettings";
 import RecurrenceSettings from "./RecurrenceSettings";
-import type { BackupFile, CalendarEvent, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings } from "./types";
+import type { BackupFile, CalendarEvent, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
 
 interface Props {
   settings: Settings;
@@ -13,20 +13,26 @@ interface Props {
   nagara: Nagara[];
   revisions: PlanRevision[];
   recurrences: RecurrenceRule[];
+  ruleMessage: string;
   onBack: () => void;
   onSaveSettings: (settings: Settings) => Promise<void>;
-  onSaveRecurrence: (rule: RecurrenceRule) => Promise<void>;
+  onAddRule: () => void;
+  onEditRule: (rule: RecurrenceRule) => void;
+  onToggleRule: (rule: RecurrenceRule) => Promise<void>;
   onDeleteRecurrence: (rule: RecurrenceRule, deleteFuture: boolean) => Promise<void>;
   onRestore: (backup: BackupFile, sourceVersion: 1 | 2) => Promise<void>;
   onImportGoogle: (create: CalendarEvent[], update: CalendarEvent[]) => Promise<void>;
 }
 
-export default function SettingsView({ settings, events, nagara, revisions, recurrences, onBack, onSaveSettings, onSaveRecurrence, onDeleteRecurrence, onRestore, onImportGoogle }: Props) {
+export default function SettingsView({
+  settings, events, nagara, revisions, recurrences, ruleMessage, onBack, onSaveSettings, onAddRule, onEditRule, onToggleRule, onDeleteRecurrence, onRestore, onImportGoogle,
+}: Props) {
   const [labels, setLabels] = useState<Record<string, string>>({ ...settings.colorLabels });
   const [labelMessage, setLabelMessage] = useState("");
   const [parents, setParents] = useState<Record<string, ParentCategory>>({ ...settings.categoryParents });
   const [parentMessage, setParentMessage] = useState("");
   const [weekMessage, setWeekMessage] = useState("");
+  const [startMessage, setStartMessage] = useState("");
   const [pending, setPending] = useState<{ backup: BackupFile; summary: BackupSummary; fileName: string; sourceVersion: 1 | 2 } | null>(null);
   const [restoreError, setRestoreError] = useState("");
   const [restoreMessage, setRestoreMessage] = useState("");
@@ -70,6 +76,17 @@ export default function SettingsView({ settings, events, nagara, revisions, recu
       setWeekMessage("保存しました");
     } catch (e) {
       setWeekMessage(e instanceof Error ? e.message : "保存できませんでした");
+    }
+    setBusy(false);
+  };
+
+  const changeStartView = async (view: StartView) => {
+    setBusy(true);
+    try {
+      await onSaveSettings({ ...settings, startView: view });
+      setStartMessage("保存しました（次に開いたときから）");
+    } catch (e) {
+      setStartMessage(e instanceof Error ? e.message : "保存できませんでした");
     }
     setBusy(false);
   };
@@ -203,7 +220,31 @@ export default function SettingsView({ settings, events, nagara, revisions, recu
           </div>
         </section>
 
-        <RecurrenceSettings settings={settings} recurrences={recurrences} onSave={onSaveRecurrence} onDelete={onDeleteRecurrence} />
+        <section>
+          <h2>起動時の表示</h2>
+          <div className="inline-actions">
+            <select
+              value={settings.startView}
+              aria-label="起動時の表示"
+              disabled={busy}
+              onChange={(e) => changeStartView(e.target.value as StartView)}
+            >
+              <option value="day">日</option>
+              <option value="week">週</option>
+              <option value="month">月</option>
+            </select>
+            {startMessage && <span className="hint">{startMessage}</span>}
+          </div>
+        </section>
+
+        <RecurrenceSettings
+          recurrences={recurrences}
+          message={ruleMessage}
+          onAdd={onAddRule}
+          onEdit={onEditRule}
+          onToggle={onToggleRule}
+          onDelete={onDeleteRecurrence}
+        />
 
         <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} />
 

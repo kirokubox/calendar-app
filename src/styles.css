@@ -331,3 +331,25 @@ button { cursor: pointer; }
 .uc-time { font-size: 0.8rem; color: #8a5a00; flex: none; }
 .uc-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .import-counts { margin: 4px 0; padding-left: 1.2em; font-size: 0.9rem; }
+
+/* v0.3.0：入力シートの上部保存・詳細の2列・繰り返しの範囲選択 */
+.sheet-head-actions { display: flex; align-items: center; gap: 8px; }
+.primary-btn.small { min-height: 36px; padding: 0 16px; }
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; align-items: start; }
+.detail-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.detail-col .chip-add input { min-width: 0; }
+@media (max-width: 359px) {
+  .detail-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.scope-choice { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid #c9d3e3; border-radius: 10px; background: #f0f5ff; }
+.scope-title { margin: 0; font-size: 0.9rem; font-weight: 700; }
+
+/* 祝日 */
+.holiday-tag { font-size: 0.75rem; color: #c62828; font-weight: 700; }
+.date-label.holiday { color: #c62828; }
+.date-holiday { margin-left: 6px; font-size: 0.75rem; font-weight: 600; }
+.week-day-head.holiday { color: #c62828; }
+.week-day-head.holiday.today { color: #fff; background: #c62828; }
+.month-cell.holiday .month-num { color: #c62828; }
+.month-cell.today.holiday .month-num { color: #fff; background: #c62828; }
+.month-holiday { display: block; font-size: 0.55rem; font-weight: 500; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }

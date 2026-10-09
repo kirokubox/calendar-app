@@ -1,5 +1,6 @@
 // 振り返り（集計）の純粋ロジック：期間・主行動の等分スイープ・未記録・前期間差・棒グラフ・ながら交差・書式。
 import { PARENT_CATEGORIES } from "./constants.js";
+import { isHoliday } from "./holidays.js";
 import { addDays, addMonths, diffDays, formatMonthLabel, formatShortDate, startOfMonth, startOfWeek, toLocal } from "./dateUtils.js";
 import { eventMap, resolveNagara } from "./nagaraLogic.js";
 import { diffSnapshots, isUnconfirmed, linkedPlanIds, snapshotOf, type SnapshotDiff } from "./planLogic.js";
@@ -67,6 +68,21 @@ export function categoryName(key: string, settings: Settings): string {
   const label = (settings.colorLabels[key] ?? "").trim();
   if (label !== "") return label;
   return key === "default" ? "他の色（色指定なし）" : `他の色（色${key}）`;
+}
+
+/**
+ * 細分類の行の表示名。細分類が空の行は色カテゴリ名で表示するが、
+ * 同じ色に別の細分類の行があるときだけ「（細分類なし）」を付けて区別する（合算はしない）。
+ */
+export function detailLabel(detailKey: string, settings: Settings, keysInScope: Iterable<string>): string {
+  const [colorKey, detailName] = detailKey.split(SEP);
+  if (detailName) return detailName;
+  const name = categoryName(colorKey, settings);
+  for (const k of keysInScope) {
+    const [c, d] = k.split(SEP);
+    if (c === colorKey && d) return `${name}（細分類なし）`;
+  }
+  return name;
 }
 
 export function parentOf(key: string, settings: Settings): ParentCategory {
@@ -352,7 +368,7 @@ function subcategoryAt(m: MainSpan, minute: number): string {
     if (/休日出勤/.test(t)) return "休日出勤";
     const d = new Date(minute * 60000);
     const weekday = d.getUTCDay();
-    if (weekday === 0 || weekday === 6) return "休日出勤";
+    if (weekday === 0 || weekday === 6 || isHoliday(d.toISOString().slice(0, 10))) return "休日出勤";
     const hm = d.getUTCHours() * 60 + d.getUTCMinutes();
     return (hm >= 9 * 60 && hm < 12 * 60) || (hm >= 12 * 60 + 45 && hm < 17 * 60 + 30) ? "定時" : "残業";
   }
@@ -391,13 +407,14 @@ const EPS = 1e-9;
 export function buildBreakdown(stats: ReviewStats, settings: Settings): Breakdown {
   const total = stats.periodMinutes;
   const ratio = (m: number) => (total > 0 ? m / total : 0);
+  const liveKeys = Object.keys(stats.byDetail).filter((k) => stats.byDetail[k] > EPS);
   const parents: BreakdownParent[] = PARENT_CATEGORIES.map((name) => ({ name, minutes: 0, ratio: 0, children: [] }));
   const byName = new Map(parents.map((p) => [p.name as string, p]));
   for (const [detailKey, minutes] of Object.entries(stats.byDetail)) {
     if (minutes <= EPS) continue;
-    const [key, detailName] = detailKey.split(SEP);
+    const [key] = detailKey.split(SEP);
     const p = byName.get(parentOf(key, settings)) ?? byName.get("その他")!;
-    const name = detailName || categoryName(key, settings);
+    const name = detailLabel(detailKey, settings, liveKeys);
     p.minutes += minutes;
     p.children.push({ key: detailKey, name, minutes, ratio: ratio(minutes), parentRatio: 0, color: detailColor(detailKey) });
   }
@@ -427,6 +444,7 @@ export interface DiffRow {
 /** 今期・前期・差（評価の言葉は付けない）。親カテゴリの下に色カテゴリ、最後に未記録 */
 export function buildDiffRows(cur: ReviewStats, prev: ReviewStats, settings: Settings): DiffRow[] {
   const keys = new Set([...Object.keys(cur.byDetail), ...Object.keys(prev.byDetail)]);
+  const liveKeys = [...keys].filter((k) => (cur.byDetail[k] ?? 0) > EPS || (prev.byDetail[k] ?? 0) > EPS);
   const rows: DiffRow[] = [];
   for (const parent of PARENT_CATEGORIES) {
     const kids = [...keys]
@@ -439,8 +457,7 @@ export function buildDiffRows(cur: ReviewStats, prev: ReviewStats, settings: Set
     const pv = kids.reduce((s, x) => s + x.prev, 0);
     rows.push({ name: parent, now, prev: pv, diff: now - pv, depth: 0 });
     for (const x of kids) {
-      const [colorKey, detailName] = x.k.split(SEP);
-      rows.push({ name: detailName || categoryName(colorKey, settings), now: x.now, prev: x.prev, diff: x.now - x.prev, depth: 1 });
+      rows.push({ name: detailLabel(x.k, settings, liveKeys), now: x.now, prev: x.prev, diff: x.now - x.prev, depth: 1 });
     }
   }
   rows.push({ name: "未記録", now: cur.unrecorded, prev: prev.unrecorded, diff: cur.unrecorded - prev.unrecorded, depth: 0 });
@@ -489,6 +506,7 @@ export interface StackedDay {
 
 /** 親カテゴリを、その日の区分別に積み上げる。色・人を選んだ場合は単色になる。 */
 export function stackedBarSeries(stats: ReviewStats, target: BarTarget, settings: Settings): StackedDay[] {
+  const scope = Object.keys(stats.byDetail).filter((k) => stats.byDetail[k] > EPS);
   return stats.perDay.map((d) => {
     if (target.type === "people") return { date: d.date, segments: [{ key: "people", label: "人がいる時間", minutes: d.people, color: "#EC407A" }] };
     if (target.type === "color") {
@@ -496,10 +514,7 @@ export function stackedBarSeries(stats: ReviewStats, target: BarTarget, settings
     }
     const segments = Object.entries(d.byDetail)
       .filter(([k, minutes]) => minutes > EPS && parentOf(k.split(SEP)[0], settings) === target.name)
-      .map(([k, minutes]) => {
-        const [colorKey, detailName] = k.split(SEP);
-        return { key: k, label: detailName || categoryName(colorKey, settings), minutes, color: detailColor(k) };
-      })
+      .map(([k, minutes]) => ({ key: k, label: detailLabel(k, settings, scope), minutes, color: detailColor(k) }))
       .sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label));
     return { date: d.date, segments };
   });
@@ -542,6 +557,14 @@ export function unconfirmedInPeriod(events: CalendarEvent[], period: Period, now
   const linked = linkedPlanIds(events);
   return events
     .filter((e) => overlapsPeriod(e.start, e.end, period) && isUnconfirmed(e, linked, nowLocal))
+    .sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
+}
+
+/** 期間にかかる、まだ終わっていない有効な予定（実績がリンクされたものを除く。開始順） */
+export function upcomingInPeriod(events: CalendarEvent[], period: Period, nowLocal: string): CalendarEvent[] {
+  const linked = linkedPlanIds(events);
+  return events
+    .filter((e) => e.kind === "plan" && e.status === "active" && !linked.has(e.id) && e.end >= nowLocal && overlapsPeriod(e.start, e.end, period))
     .sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
 }
 

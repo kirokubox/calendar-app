@@ -20,6 +20,7 @@ const revision: PlanRevision = {
 const rule: RecurrenceRule = {
   id: "c1", title: "朝礼", colorId: "11", startTime: "09:00", endTime: "09:15", weekdays: [1, 2, 3, 4, 5], startDate: "2026-10-01", endDate: null, active: true,
   generatedDates: ["2026-10-08"],
+  people: ["友人"], places: ["職場"], subcategory: "定時", memo: "m", nagaraLabels: ["音楽"], excludeHolidays: true, removedDates: ["2026-10-08"],
 };
 
 function json(v: unknown): unknown {
@@ -102,4 +103,31 @@ test("マージ（全ストア共通）：同じidは上書き、それ以外は
   const merged = mergeById([nagara, session], [{ ...nagara, label: "ラジオ" }, { ...session, id: "n3" }]);
   assert.equal(merged.length, 3);
   assert.equal(merged.find((n) => n.id === "n1")?.label, "ラジオ");
+});
+
+test("繰り返し：旧形式（v0.2.0）のルールは既定値で読み、墓標をイベントから導出する", () => {
+  const legacy = {
+    id: "c2", title: "昼", colorId: "3", startTime: "12:00", endTime: "12:45", weekdays: [1], startDate: "2026-10-01", endDate: "2026-12-25", active: true,
+    generatedDates: ["2026-10-05", "2026-10-12"],
+  };
+  const b = { ...json(buildBackup([ev("o1", { recurrenceId: "c2", recurrenceDate: "2026-10-05" })], defaultSettings(), "x")) as Record<string, unknown>, recurrences: [legacy] };
+  const r = validateBackup(b);
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    const got = r.backup.recurrences[0];
+    assert.deepEqual(got.removedDates, ["2026-10-12"], "予定のない作成済み日＝本人が消した日");
+    assert.deepEqual([got.people, got.places, got.subcategory, got.memo, got.nagaraLabels, got.excludeHolidays], [[], [], null, "", [], false]);
+  }
+  const bad = { ...b, recurrences: [{ ...legacy, excludeHolidays: "yes" }] };
+  assert.equal(validateBackup(bad).ok, false);
+});
+
+test("設定：起動時の表示が往復し、無ければ週になる", () => {
+  const b = buildBackup([], { ...defaultSettings(), startView: "month" }, "x");
+  const r = validateBackup(json(b));
+  assert.equal(r.ok && r.backup.settings.startView, "month");
+  const old = json(b) as { settings: Record<string, unknown> };
+  delete old.settings.startView;
+  const r2 = validateBackup(old);
+  assert.equal(r2.ok && r2.backup.settings.startView, "week");
 });

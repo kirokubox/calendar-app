@@ -1,30 +1,16 @@
 import { useState } from "react";
-import { COLOR_HEX, COLOR_IDS } from "./constants";
-import { dateKeyOf, weekdayName } from "./dateUtils";
-import { WEEKDAYS_DEFAULT, validateRule } from "./planLogic";
-import { newId } from "./storage";
-import type { ColorId, RecurrenceRule, Settings } from "./types";
+import { COLOR_HEX } from "./constants";
+import { formatShortDate, weekdayName } from "./dateUtils";
+import type { RecurrenceRule } from "./types";
 
 interface Props {
-  settings: Settings;
   recurrences: RecurrenceRule[];
-  onSave: (rule: RecurrenceRule) => Promise<void>;
+  /** 直前の操作の結果（保存・停止・削除） */
+  message: string;
+  onAdd: () => void;
+  onEdit: (rule: RecurrenceRule) => void;
+  onToggle: (rule: RecurrenceRule) => Promise<void>;
   onDelete: (rule: RecurrenceRule, deleteFuture: boolean) => Promise<void>;
-}
-
-interface Draft {
-  id: string | null;
-  title: string;
-  colorId: ColorId;
-  startTime: string;
-  endTime: string;
-  weekdays: number[];
-  startDate: string;
-  endDate: string;
-}
-
-function newDraft(): Draft {
-  return { id: null, title: "", colorId: null, startTime: "09:00", endTime: "18:00", weekdays: [...WEEKDAYS_DEFAULT], startDate: dateKeyOf(new Date()), endDate: "" };
 }
 
 /** 曜日を月〜日の順で並べる（0=日は最後） */
@@ -32,143 +18,57 @@ const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 function summary(r: RecurrenceRule): string {
   const days = WEEKDAY_ORDER.filter((d) => r.weekdays.includes(d)).map(weekdayName).join("");
-  return `${days}　${r.startTime}〜${r.endTime}${r.endTime <= r.startTime ? "（翌日）" : ""}　${r.startDate}〜${r.endDate ?? ""}`;
+  const period = `${formatShortDate(r.startDate)}〜${r.endDate ? formatShortDate(r.endDate) : "終了日未設定（56日先まで）"}`;
+  return `${days}${r.excludeHolidays ? "（祝日除く）" : ""}　${r.startTime}〜${r.endTime}${r.endTime <= r.startTime ? "（翌日）" : ""}　${period}`;
 }
 
-/** 設定画面の「平日の繰り返し予定」：ルールの一覧・追加・編集・停止 */
-export default function RecurrenceSettings({ settings, recurrences, onSave, onDelete }: Props) {
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [message, setMessage] = useState("");
+/** 設定画面の「繰り返し予定」：ルールの一覧。追加・編集は共通の入力モーダルで開く */
+export default function RecurrenceSettings({ recurrences, message, onAdd, onEdit, onToggle, onDelete }: Props) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const sorted = [...recurrences].sort((a, b) => a.startTime.localeCompare(b.startTime) || a.startDate.localeCompare(b.startDate) || a.title.localeCompare(b.title));
 
-  const labelOf = (key: string) => (settings.colorLabels[key] ?? "").trim();
-  const sorted = [...recurrences].sort((a, b) => a.startTime.localeCompare(b.startTime) || a.title.localeCompare(b.title));
-  const error = draft ? validateRule({ ...draft, endDate: draft.endDate === "" ? null : draft.endDate }) : null;
-
-  const edit = (r: RecurrenceRule) => {
-    setMessage("");
-    setDraft({ id: r.id, title: r.title, colorId: r.colorId, startTime: r.startTime, endTime: r.endTime, weekdays: [...r.weekdays], startDate: r.startDate, endDate: r.endDate ?? "" });
-  };
-
-  const save = async () => {
-    if (!draft || error) return;
+  const run = async (action: () => Promise<void>) => {
     setBusy(true);
+    setError("");
     try {
-      const old = recurrences.find((r) => r.id === draft.id);
-      const rule: RecurrenceRule = {
-        id: old?.id ?? newId(),
-        title: draft.title.trim(),
-        colorId: draft.colorId,
-        startTime: draft.startTime,
-        endTime: draft.endTime,
-        weekdays: [...draft.weekdays].sort((a, b) => a - b),
-        startDate: draft.startDate,
-        endDate: draft.endDate === "" ? null : draft.endDate,
-        active: old?.active ?? true,
-        generatedDates: old?.generatedDates ?? [],
-      };
-      await onSave(rule);
-      setDraft(null);
-      setMessage("保存しました。今日以降の未編集予定へ反映しました");
+      await action();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "保存できませんでした");
+      setError(e instanceof Error ? e.message : "保存できませんでした");
     }
     setBusy(false);
   };
 
-  const remove = async (r: RecurrenceRule) => {
+  const remove = (r: RecurrenceRule) => {
     const deleteFuture = window.confirm("ルールと一緒に、今日以降の未編集予定も削除しますか？\n\nOK：ルール＋未来の未編集予定\nキャンセル：次の確認でルールだけ削除できます");
     if (!deleteFuture && !window.confirm("ルールだけ削除しますか？\n作成済みの予定は残ります。")) return;
-    setBusy(true);
-    try {
-      await onDelete(r, deleteFuture);
-      setDraft(null);
-      setMessage(deleteFuture ? "ルールと未来の未編集予定を削除しました" : "ルールだけ削除しました");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "削除できませんでした");
-    }
-    setBusy(false);
-  };
-
-  const toggleActive = async (r: RecurrenceRule) => {
-    setBusy(true);
-    try {
-      await onSave({ ...r, active: !r.active });
-      setMessage(r.active ? "停止しました（作成済みの予定はそのままです）" : "再開しました");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "保存できませんでした");
-    }
-    setBusy(false);
-  };
-
-  const toggleDay = (d: number) => {
-    if (!draft) return;
-    setDraft({ ...draft, weekdays: draft.weekdays.includes(d) ? draft.weekdays.filter((x) => x !== d) : [...draft.weekdays, d] });
+    void run(() => onDelete(r, deleteFuture));
   };
 
   return (
     <section>
       <h2>繰り返し予定</h2>
-      <p className="hint">選んだ曜日の予定を今日から56日先まで作ります。ルール編集は今日以降の未編集予定へ反映し、個別編集・実績リンク・キャンセル済みの予定は保護します。</p>
+      <p className="hint">
+        選んだ曜日の予定を、開始日（または今日）から終了日まで作ります。ルールを編集すると、今日以降の未編集の予定へ反映します。
+        個別に変えた・キャンセルした・実績がある予定と、手で消した日はそのままです。カレンダー上の予定からも「この予定だけ／この日以降」で編集できます。
+      </p>
+      <div className="inline-actions">
+        <button type="button" className="secondary-btn" disabled={busy} onClick={onAdd}>ルールを追加</button>
+        {message && <span className="hint">{message}</span>}
+      </div>
+      {error && <p className="notice error" role="alert">{error}</p>}
       {sorted.length === 0 && <p className="hint">ルールはまだありません。</p>}
       <ul className="rule-list">
         {sorted.map((r) => (
           <li key={r.id} className={r.active ? "" : "off"}>
             <i className="dot" style={{ background: COLOR_HEX[r.colorId ?? "default"], width: 14, height: 14, borderRadius: "50%", flex: "none" }} />
             <span className="rule-main"><strong>{r.title}{r.active ? "" : "（停止中）"}</strong>{summary(r)}</span>
-            <button type="button" className="secondary-btn small" disabled={busy} onClick={() => edit(r)}>編集</button>
-            <button type="button" className="secondary-btn small" disabled={busy} onClick={() => toggleActive(r)}>{r.active ? "停止" : "再開"}</button>
+            <button type="button" className="secondary-btn small" disabled={busy} onClick={() => onEdit(r)}>編集</button>
+            <button type="button" className="secondary-btn small" disabled={busy} onClick={() => void run(() => onToggle(r))}>{r.active ? "停止" : "再開"}</button>
             <button type="button" className="danger-btn small" disabled={busy} onClick={() => remove(r)}>削除</button>
           </li>
         ))}
       </ul>
-      {!draft && (
-        <div className="inline-actions">
-          <button type="button" className="secondary-btn" onClick={() => { setMessage(""); setDraft(newDraft()); }}>ルールを追加</button>
-          {message && <span className="hint">{message}</span>}
-        </div>
-      )}
-      {draft && (
-        <div className="rule-form">
-          <input type="text" placeholder="タイトル（例：仕事）" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-label="ルールのタイトル" />
-          <div className="rule-row">
-            <span className="row-label">色</span>
-            <select value={draft.colorId ?? "default"} aria-label="ルールの色" onChange={(e) => setDraft({ ...draft, colorId: e.target.value === "default" ? null : e.target.value })}>
-              <option value="default">{labelOf("default") || "色指定なし"}</option>
-              {COLOR_IDS.map((id) => <option key={id} value={id}>{labelOf(id) || `色${id}`}</option>)}
-            </select>
-          </div>
-          <div className="rule-row">
-            <span className="row-label">時刻</span>
-            <input type="time" value={draft.startTime} onChange={(e) => setDraft({ ...draft, startTime: e.target.value })} aria-label="開始時刻" />
-            〜
-            <input type="time" value={draft.endTime} onChange={(e) => setDraft({ ...draft, endTime: e.target.value })} aria-label="終了時刻" />
-            {draft.endTime !== "" && draft.endTime <= draft.startTime && <span className="next-day">翌日</span>}
-          </div>
-          <div className="rule-row">
-            <span className="row-label">曜日</span>
-            <div className="weekday-chips" role="group" aria-label="曜日">
-              {WEEKDAY_ORDER.map((d) => (
-                <button key={d} type="button" className={draft.weekdays.includes(d) ? "on" : ""} aria-pressed={draft.weekdays.includes(d)} onClick={() => toggleDay(d)}>{weekdayName(d)}</button>
-              ))}
-            </div>
-          </div>
-          <div className="rule-row">
-            <span className="row-label">開始日</span>
-            <input type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} aria-label="開始日" />
-          </div>
-          <div className="rule-row">
-            <span className="row-label">終了日</span>
-            <input type="date" value={draft.endDate} onChange={(e) => setDraft({ ...draft, endDate: e.target.value })} aria-label="終了日（任意）" />
-            <span className="hint">任意</span>
-          </div>
-          {error && <p className="notice error" role="alert">{error}</p>}
-          <div className="inline-actions">
-            <button type="button" className="primary-btn" disabled={busy || !!error} onClick={save}>保存</button>
-            <button type="button" className="secondary-btn" disabled={busy} onClick={() => setDraft(null)}>やめる</button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

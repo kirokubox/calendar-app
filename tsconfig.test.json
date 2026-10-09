@@ -25,6 +25,8 @@
     "src/reviewLogic.ts",
     "src/reviewMarkdown.ts",
     "src/googleImport.ts",
+    "src/holidays.ts",
+    "src/recurrence.ts",
     "tests/dateUtils.test.ts",
     "tests/layout.test.ts",
     "tests/eventLogic.test.ts",
@@ -37,6 +39,8 @@
     "tests/planLogic.test.ts",
     "tests/reviewLogic.test.ts",
     "tests/reviewMarkdown.test.ts",
-    "tests/googleImport.test.ts"
+    "tests/googleImport.test.ts",
+    "tests/holidays.test.ts",
+    "tests/recurrence.test.ts"
   ]
 }

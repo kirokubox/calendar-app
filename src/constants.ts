@@ -1,6 +1,6 @@
 import type { ParentCategory, Settings } from "./types.js";
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 export const BACKUP_APP_NAME = "calendar-app";
 
 export const COLOR_IDS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"] as const;
@@ -59,10 +59,16 @@ export const PARENT_COLORS: Record<string, string> = {
 
 export const DB_SCHEMA_VERSION = 2;
 
+/** ながらの固定候補（履歴候補・自由入力と併用） */
+export const FIXED_NAGARA = ["YouTube", "音楽", "Spoon", "アニメ"];
+/** 場所の固定候補（履歴候補・自由入力と併用） */
+export const FIXED_PLACES = ["家", "職場", "カフェ"];
+
 export function defaultSettings(): Settings {
   return {
     schemaVersion: 2,
     weekStartDay: 1,
+    startView: "week",
     categoryParents: defaultCategoryParents(),
     colorLabels: {
       default: "趣味・遊び",

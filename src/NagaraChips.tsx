@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { timePart } from "./dateUtils";
+import { quickCandidates } from "./eventLogic";
 import type { NagaraDraft } from "./nagaraLogic";
 import { newId } from "./storage";
 
@@ -10,6 +11,10 @@ interface Props {
   /** イベントの現在の開始・終了。時間を指定するときの初期値 */
   eventStart: string;
   eventEnd: string;
+  /** 固定候補（履歴候補より先に出す） */
+  fixed?: string[];
+  /** 部分的な時間を指定できるか（繰り返しルールではイベント全体だけ） */
+  allowTime?: boolean;
 }
 
 function chipTime(d: NagaraDraft): string {
@@ -17,7 +22,7 @@ function chipTime(d: NagaraDraft): string {
 }
 
 /** イベントの基本画面のながら欄：ラベルを入力して追加するチップ式。チップをタップすると時間（任意）を設定できる */
-export default function NagaraChips({ drafts, onChange, suggestions, eventStart, eventEnd }: Props) {
+export default function NagaraChips({ drafts, onChange, suggestions, eventStart, eventEnd, fixed = [], allowTime = true }: Props) {
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -36,7 +41,7 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
     if (selected === key) setSelected(null);
   };
 
-  const quick = suggestions.filter((s) => !drafts.some((d) => d.label === s)).slice(0, 6);
+  const quick = quickCandidates(fixed, suggestions, drafts.map((d) => d.label));
   const sel = drafts.find((d) => d.key === selected) ?? null;
 
   return (
@@ -46,21 +51,23 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
         <ul className="chip-list">
           {drafts.map((d) => (
             <li key={d.key} className={`chip nagara-chip ${selected === d.key ? "selected" : ""}`}>
-              <button
-                type="button"
-                className="chip-body"
-                aria-pressed={selected === d.key}
-                aria-label={`${d.label}の時間を設定`}
-                onClick={() => setSelected(selected === d.key ? null : d.key)}
-              >
-                ＋{d.label}{chipTime(d)}
-              </button>
+              {allowTime ? (
+                <button
+                  type="button"
+                  className="chip-body"
+                  aria-pressed={selected === d.key}
+                  aria-label={`${d.label}の時間を設定`}
+                  onClick={() => setSelected(selected === d.key ? null : d.key)}
+                >
+                  ＋{d.label}{chipTime(d)}
+                </button>
+              ) : <span className="chip-body">＋{d.label}</span>}
               <button type="button" className="chip-mini" aria-label={`${d.label}を外す`} onClick={() => remove(d.key)}>×</button>
             </li>
           ))}
         </ul>
       )}
-      {sel && (
+      {allowTime && sel && (
         <div className="nagara-time">
           <label className="check-row">
             <input
@@ -96,7 +103,7 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
           type="text"
           value={text}
           list="nagara-label-suggestions"
-          placeholder="例：YouTube"
+          placeholder="自由入力"
           aria-label="ながらを追加"
           onChange={(e) => setText(e.target.value)}
           onBlur={() => add(text)}
