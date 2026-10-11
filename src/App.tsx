@@ -28,6 +28,7 @@ import {
 import EventModal, { type EditScope, type ModalTab } from "./EventModal";
 import EventBlock, { eventStyle } from "./EventBlock";
 import EventViewer from "./EventViewer";
+import { Icon } from "./Icon";
 import MarkerPins from "./MarkerPins";
 import MarkerSheet from "./MarkerSheet";
 import MonthView from "./MonthView";
@@ -604,7 +605,7 @@ export default function App() {
     <div className="toast" role="status">
       <span className="toast-text">{toast.text}</span>
       {toast.actions.map((a) => <button key={a.label} type="button" className="toast-btn" onClick={a.run}>{a.label}</button>)}
-      <button type="button" className="toast-btn close" aria-label="閉じる" onClick={() => setToast(null)}>×</button>
+      <button type="button" className="toast-btn close" aria-label="閉じる" onClick={() => setToast(null)}><Icon name="x" size={18} /></button>
     </div>
   );
 
@@ -691,7 +692,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbar-row">
-          <button type="button" className="icon-btn" aria-label={`前の${stepName}`} onClick={() => step(-1)}>◀</button>
+          <button type="button" className="icon-btn" aria-label={`前の${stepName}`} onClick={() => step(-1)}><Icon name="chevron-left" /></button>
           <label className="date-jump" title="日付を選ぶ">
             <span className={`date-label ${multiDay ? "small" : ""} ${viewMode === "day" ? weekendClass(dayKey) : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
             <input
@@ -701,11 +702,11 @@ export default function App() {
               onChange={(e) => { if (e.target.value) setDayKey(e.target.value); }}
             />
           </label>
-          <button type="button" className="icon-btn" aria-label={`次の${stepName}`} onClick={() => step(1)}>▶</button>
+          <button type="button" className="icon-btn" aria-label={`次の${stepName}`} onClick={() => step(1)}><Icon name="chevron-right" /></button>
           <span className="spacer" />
           <button type="button" className="text-btn" onClick={() => setDayKey(todayKey)} disabled={isCurrent}>今日</button>
-          <button type="button" className="icon-btn" aria-label="振り返り" onClick={() => { setReviewAnchor(dayKey); setView("review"); }}>📊</button>
-          <button type="button" className="icon-btn" aria-label="設定" onClick={() => setView("settings")}>⚙</button>
+          <button type="button" className="icon-btn" aria-label="振り返り" onClick={() => { setReviewAnchor(dayKey); setView("review"); }}><Icon name="chart" /></button>
+          <button type="button" className="icon-btn" aria-label="設定" onClick={() => setView("settings")}><Icon name="settings" /></button>
         </div>
         <div className="view-switch">
           <div className="segmented" role="group" aria-label="表示の切り替え">
@@ -715,7 +716,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          <button type="button" className="icon-btn search-btn" aria-label="検索" onClick={() => setView("search")}>🔍</button>
+          <button type="button" className="icon-btn search-btn" aria-label="検索" onClick={() => setView("search")}><Icon name="search" /></button>
         </div>
       </header>
 
@@ -833,8 +834,8 @@ export default function App() {
       )}
       </div>
 
-      <button type="button" className="fab fab-quick" aria-label="いまの時刻で記録（マーカー・ながら・睡眠）" aria-expanded={quickOpen} onClick={() => setQuickOpen((v) => !v)}>◆</button>
-      <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}>＋</button>
+      <button type="button" className="fab fab-quick" aria-label="いまの時刻で記録（マーカー・ながら・睡眠）" aria-expanded={quickOpen} onClick={() => setQuickOpen((v) => !v)}><Icon name="diamond" size={18} /></button>
+      <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}><Icon name="plus" size={28} /></button>
 
       {quickOpen && (
         <QuickPanel

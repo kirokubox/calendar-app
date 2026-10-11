@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { timePart } from "./dateUtils";
 import { quickCandidates } from "./eventLogic";
+import { Icon } from "./Icon";
 import type { NagaraDraft } from "./nagaraLogic";
 import { newId } from "./storage";
 
@@ -62,7 +63,7 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
                   ＋{d.label}{chipTime(d)}
                 </button>
               ) : <span className="chip-body">＋{d.label}</span>}
-              <button type="button" className="chip-mini" aria-label={`${d.label}を外す`} onClick={() => remove(d.key)}>×</button>
+              <button type="button" className="chip-mini" aria-label={`${d.label}を外す`} onClick={() => remove(d.key)}><Icon name="x" size={14} /></button>
             </li>
           ))}
         </ul>

@@ -168,7 +168,7 @@ function validateList<T>(
 
 /** バックアップJSON（パース済みの値）の形式検証。v1・v2の両方を受け付け、v2の形に揃えて返す。不正なら理由を返す */
 export function validateBackup(value: unknown): ValidationResult {
-  if (!isRecord(value)) return { ok: false, reason: "JSONの最上位がオブジェクトではありません" };
+  if (!isRecord(value)) return { ok: false, reason: "ファイルの最上位がオブジェクトではありません" };
   if (value.app !== BACKUP_APP_NAME) return { ok: false, reason: `このアプリのバックアップではありません（app が ${BACKUP_APP_NAME} ではありません）` };
   if (value.schemaVersion !== 1 && value.schemaVersion !== 2) return { ok: false, reason: `未対応の schemaVersion です（${String(value.schemaVersion)}）` };
   const sourceVersion: 1 | 2 = value.schemaVersion;

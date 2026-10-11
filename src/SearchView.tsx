@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { COLOR_HEX } from "./constants";
+import { Icon } from "./Icon";
 import { datePart, formatShortDate, timePart } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
 import { categoryName, colorKeyOf, formatDuration } from "./reviewLogic";
@@ -50,7 +51,7 @@ export default function SearchView({ events, nagara, markers, settings, nowLocal
     <div className="review">
       <header className="topbar">
         <div className="topbar-row">
-          <button type="button" className="text-btn" onClick={onBack}>← カレンダーへ</button>
+          <button type="button" className="text-btn" onClick={onBack}><Icon name="arrow-left" size={18} />カレンダーへ</button>
           <h1 className="settings-title">検索</h1>
         </div>
         <div className="search-form">

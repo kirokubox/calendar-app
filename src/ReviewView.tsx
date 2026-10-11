@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { COLOR_KEYS, PARENT_CATEGORIES, PARENT_COLORS } from "./constants";
 import { formatShortDate } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
+import { Icon } from "./Icon";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import {
   DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
@@ -67,7 +68,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
     <div className="review">
       <header className="topbar">
         <div className="topbar-row">
-          <button type="button" className="text-btn" onClick={onBack}>← カレンダーへ</button>
+          <button type="button" className="text-btn" onClick={onBack}><Icon name="arrow-left" size={18} />カレンダーへ</button>
           <h1 className="settings-title">振り返り</h1>
         </div>
         <div className="review-nav">
@@ -78,9 +79,9 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
               </button>
             ))}
           </div>
-          <button type="button" className="icon-btn" aria-label={`前の${KIND_LABEL[kind]}`} onClick={() => move(-1)}>◀</button>
+          <button type="button" className="icon-btn" aria-label={`前の${KIND_LABEL[kind]}`} onClick={() => move(-1)}><Icon name="chevron-left" /></button>
           <span className="review-label">{periodLabel(period)}</span>
-          <button type="button" className="icon-btn" aria-label={`次の${KIND_LABEL[kind]}`} onClick={() => move(1)}>▶</button>
+          <button type="button" className="icon-btn" aria-label={`次の${KIND_LABEL[kind]}`} onClick={() => move(1)}><Icon name="chevron-right" /></button>
           <button type="button" className="text-btn" onClick={() => onChange(kind, todayKey)} disabled={isCurrent}>今日</button>
         </div>
       </header>
@@ -89,7 +90,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
         <section>
           <h2>時間構成{drilled ? `：${drilled.name}` : ""}</h2>
           {drilled && (
-            <button type="button" className="secondary-btn small" onClick={() => setDrill(null)}>← 親カテゴリへ戻る</button>
+            <button type="button" className="secondary-btn small" onClick={() => setDrill(null)}><Icon name="arrow-left" size={16} />親カテゴリへ戻る</button>
           )}
           <PieChart slices={slices} onSelect={drilled ? undefined : (key) => { if (key !== "未記録") setDrill(key as ParentCategory); }} />
           <ul className="share-list">
@@ -110,7 +111,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
                         <i className="dot" style={{ background: PARENT_COLORS[p.name] }} />
                         <span className="share-name">{p.name}</span>
                         <span className="share-val">{formatShare(p.minutes, total)}</span>
-                        <span className="share-chev">›</span>
+                        <span className="share-chev"><Icon name="chevron-right" size={16} /></span>
                       </button>
                     </li>
                   )),

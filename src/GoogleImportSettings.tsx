@@ -42,7 +42,7 @@ export default function GoogleImportSettings({ events, onImport }: Props) {
       try {
         parsed = JSON.parse(await file.text());
       } catch {
-        setError("JSONとして読み込めませんでした（ファイルが壊れているか、JSONではありません）");
+        setError("ファイルを読み込めませんでした（壊れているか、取り込み用のファイルではありません）");
         return;
       }
       const result = parseGoogleImport(parsed);
@@ -76,12 +76,12 @@ export default function GoogleImportSettings({ events, onImport }: Props) {
     <section>
       <h2>Googleカレンダーから取り込む</h2>
       <p className="hint">
-        取り込み用のJSONファイルを読み込みます。取り込んだものは種別「不明」になり、振り返りでは実績と同じく集計されます。
+        取り込み用のファイルを読み込みます。取り込んだものは種別「不明」になり、振り返りでは実績と同じく集計されます。
         取り込み後にアプリで編集したものは、次回の取り込みで上書きしません。
       </p>
       <div className="inline-actions">
         <label className="secondary-btn file-btn">
-          取り込みJSONを選ぶ
+          取り込むファイルを選ぶ
           <input ref={fileRef} type="file" accept="application/json,.json" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
         </label>
       </div>
@@ -102,7 +102,7 @@ export default function GoogleImportSettings({ events, onImport }: Props) {
               <ul>{pending.skipped.map((s) => <li key={s}>{s}</li>)}</ul>
             </div>
           )}
-          {pending.duplicates > 0 && <p className="hint">同じ googleEventId が {pending.duplicates} 件重複していたため、後のものを使います。</p>}
+          {pending.duplicates > 0 && <p className="hint">同じ予定が {pending.duplicates} 件重複していたため、後のものを使います。</p>}
           <div className="inline-actions">
             <button type="button" className="primary-btn" onClick={confirm} disabled={busy || pending.plan.create.length + pending.plan.update.length === 0}>
               この内容で取り込む

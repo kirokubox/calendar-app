@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { dateKeyOf, toLocal } from "./dateUtils";
+import { Icon } from "./Icon";
 import { periodFileName, periodLabel, periodOf, shiftPeriod, type PeriodKind } from "./reviewLogic";
 import { buildReviewMarkdown } from "./reviewMarkdown";
 import type { ActiveSleep, CalendarEvent, Marker, Nagara, PlanRevision, Settings } from "./types";
@@ -13,7 +14,7 @@ interface Props {
   activeSleep: ActiveSleep | null;
 }
 
-/** 設定画面の「AI用Markdown」：週・月を選んで .md を書き出す */
+/** 設定画面の「AIに渡す書き出し」：週・月を選んで .md を書き出す（画面では Markdown と呼ばない） */
 export default function AiMarkdownSettings({ settings, events, nagara, revisions, markers, activeSleep }: Props) {
   const [kind, setKind] = useState<PeriodKind>("week");
   const [anchor, setAnchor] = useState(() => dateKeyOf(new Date()));
@@ -47,8 +48,8 @@ export default function AiMarkdownSettings({ settings, events, nagara, revisions
 
   return (
     <section>
-      <h2>AI用Markdown（週・月）</h2>
-      <p className="hint">期間の時間構成・ながら・場所・未確定の予定・日ごとの明細・マーカーをまとめたMarkdownを書き出します。AIへの相談に貼れます。</p>
+      <h2>AIに渡す書き出し（週・月）</h2>
+      <p className="hint">期間の時間構成・ながら・場所・未確定の予定・日ごとの明細・マーカーをまとめたテキストを書き出します。AIへの相談に貼れます。</p>
       <div className="inline-actions">
         <div className="segmented" role="group" aria-label="期間の単位">
           {(["week", "month"] as PeriodKind[]).map((k) => (
@@ -57,12 +58,12 @@ export default function AiMarkdownSettings({ settings, events, nagara, revisions
             </button>
           ))}
         </div>
-        <button type="button" className="icon-btn" aria-label="前の期間" onClick={() => { setAnchor(shiftPeriod(period, -1).start); setMessage(""); }}>◀</button>
+        <button type="button" className="icon-btn" aria-label="前の期間" onClick={() => { setAnchor(shiftPeriod(period, -1).start); setMessage(""); }}><Icon name="chevron-left" /></button>
         <span className="review-label">{periodLabel(period)}</span>
-        <button type="button" className="icon-btn" aria-label="次の期間" onClick={() => { setAnchor(shiftPeriod(period, 1).start); setMessage(""); }}>▶</button>
+        <button type="button" className="icon-btn" aria-label="次の期間" onClick={() => { setAnchor(shiftPeriod(period, 1).start); setMessage(""); }}><Icon name="chevron-right" /></button>
       </div>
       <div className="inline-actions">
-        <button type="button" className="primary-btn" onClick={download}>Markdownを書き出す</button>
+        <button type="button" className="primary-btn" onClick={download}>書き出す</button>
         <button type="button" className="secondary-btn" onClick={copy}>コピー</button>
         {message && <span className="hint">{message}</span>}
       </div>

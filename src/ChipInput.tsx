@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { addChipValue, moveItem, quickCandidates } from "./eventLogic";
+import { Icon } from "./Icon";
 
 interface Props {
   label: string;
@@ -34,12 +35,12 @@ export default function ChipInput({ label, values, onChange, suggestions, placeh
             <li key={v} className="chip">
               {reorderable && (
                 <>
-                  <button type="button" className="chip-mini" aria-label={`${v}を前へ`} disabled={i === 0} onClick={() => onChange(moveItem(values, i, -1))}>▲</button>
-                  <button type="button" className="chip-mini" aria-label={`${v}を後ろへ`} disabled={i === values.length - 1} onClick={() => onChange(moveItem(values, i, 1))}>▼</button>
+                  <button type="button" className="chip-mini" aria-label={`${v}を前へ`} disabled={i === 0} onClick={() => onChange(moveItem(values, i, -1))}><Icon name="chevron-up" size={16} /></button>
+                  <button type="button" className="chip-mini" aria-label={`${v}を後ろへ`} disabled={i === values.length - 1} onClick={() => onChange(moveItem(values, i, 1))}><Icon name="chevron-down" size={16} /></button>
                 </>
               )}
               <span className="chip-text">{v}</span>
-              <button type="button" className="chip-mini" aria-label={`${v}を外す`} onClick={() => onChange(values.filter((x) => x !== v))}>×</button>
+              <button type="button" className="chip-mini" aria-label={`${v}を外す`} onClick={() => onChange(values.filter((x) => x !== v))}><Icon name="x" size={14} /></button>
             </li>
           ))}
         </ul>

@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
 import { backupFileName, buildBackup, summarizeBackup, validateBackup, type BackupSummary } from "./backup";
 import { APP_VERSION, COLOR_HEX, COLOR_IDS, PARENT_CATEGORIES } from "./constants";
-import { dateKeyOf, weekdayName } from "./dateUtils";
+import { dateKeyOf, isDateKey, parseDateKey, timePart, toLocal, weekdayName } from "./dateUtils";
 import AiMarkdownSettings from "./AiMarkdownSettings";
 import GoogleImportSettings from "./GoogleImportSettings";
+import { Icon } from "./Icon";
 import RecurrenceSettings from "./RecurrenceSettings";
 import type { ActiveSleep, BackupFile, CalendarEvent, Marker, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
 
@@ -24,6 +25,22 @@ interface Props {
   onDeleteRecurrence: (rule: RecurrenceRule, deleteFuture: boolean) => Promise<void>;
   onRestore: (backup: BackupFile, sourceVersion: 1 | 2) => Promise<void>;
   onImportGoogle: (create: CalendarEvent[], update: CalendarEvent[]) => Promise<void>;
+}
+
+/** 画面に見せる日付（10月12日（月）。今年以外は年を付ける）。保存値・ファイルの中身には使わない */
+function displayDate(key: string): string {
+  if (!isDateKey(key)) return key;
+  const d = parseDateKey(key);
+  const year = d.getFullYear() === new Date().getFullYear() ? "" : `${d.getFullYear()}年`;
+  return `${year}${d.getMonth() + 1}月${d.getDate()}日（${weekdayName(d.getDay())}）`;
+}
+
+/** バックアップを保存した日時（ISO文字列）を、端末の時刻で見せる */
+function displayDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const local = toLocal(d);
+  return `${displayDate(local.slice(0, 10))} ${timePart(local)}`;
 }
 
 export default function SettingsView({
@@ -116,7 +133,7 @@ export default function SettingsView({
     try {
       parsed = JSON.parse(await file.text());
     } catch {
-      setRestoreError("JSONとして読み込めませんでした（ファイルが壊れているか、JSONではありません）");
+      setRestoreError("ファイルを読み込めませんでした（壊れているか、バックアップのファイルではありません）");
       return;
     }
     const result = validateBackup(parsed);
@@ -152,7 +169,7 @@ export default function SettingsView({
     <div className="settings">
       <header className="topbar">
         <div className="topbar-row">
-          <button type="button" className="text-btn" onClick={onBack}>← カレンダーへ</button>
+          <button type="button" className="text-btn" onClick={onBack}><Icon name="arrow-left" size={18} />カレンダーへ</button>
           <h1 className="settings-title">設定</h1>
         </div>
       </header>
@@ -257,9 +274,9 @@ export default function SettingsView({
           <h2>バックアップ</h2>
           <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所、{markers.length} 件のマーカーがあります。</p>
           <div className="inline-actions">
-            <button type="button" className="secondary-btn" onClick={exportJson}>JSONで書き出す</button>
+            <button type="button" className="secondary-btn" onClick={exportJson}>バックアップを保存</button>
             <label className="secondary-btn file-btn">
-              JSONから復元
+              バックアップから復元
               <input ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => onFile(e.target.files?.[0])} />
             </label>
           </div>
@@ -270,11 +287,11 @@ export default function SettingsView({
               <p><strong>{pending.fileName}</strong></p>
               <p>
                 {pending.summary.count}件
-                {pending.summary.from && pending.summary.to ? `（${pending.summary.from} 〜 ${pending.summary.to}）` : ""}
-                ・書き出し日時 {pending.backup.exportedAt.slice(0, 16).replace("T", " ")}
+                {pending.summary.from && pending.summary.to ? `（${displayDate(pending.summary.from)}〜${displayDate(pending.summary.to)}）` : ""}
+                ・保存した日時 {displayDateTime(pending.backup.exportedAt)}
               </p>
               <p className="hint">
-                同じidの予定・実績・ながら・マーカーは上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます
+                同じ予定・実績・ながら・マーカーは上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます
                 {pending.sourceVersion === 1 ? "（古い形式のバックアップなので、週の始まりと親カテゴリは今の設定のままです）" : ""}。
               </p>
               <div className="inline-actions">
@@ -289,7 +306,7 @@ export default function SettingsView({
           <h2>このアプリについて</h2>
           <ul className="about">
             <li>データはこの端末のブラウザ内にだけ保存されます。サーバーには送信されません。</li>
-            <li>ブラウザのデータ消去や端末の故障で失われることがあるため、定期的に「JSONで書き出す」でバックアップしてください。</li>
+            <li>ブラウザのデータ消去や端末の故障で失われることがあるため、定期的に「バックアップを保存」でバックアップしてください。</li>
             <li>バージョン {APP_VERSION}</li>
           </ul>
         </section>

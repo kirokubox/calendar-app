@@ -30,7 +30,7 @@ function strOrNull(v: unknown): string | null {
 
 /** 取り込み用JSON（パース済みの値）の検証。形式が違えばエラー、1件ずつの不正は読み飛ばして理由を返す */
 export function parseGoogleImport(value: unknown): ParseImportResult {
-  if (!isRecord(value)) return { ok: false, reason: "JSONの最上位がオブジェクトではありません" };
+  if (!isRecord(value)) return { ok: false, reason: "ファイルの最上位がオブジェクトではありません" };
   if (value.app !== "calendar-app" || value.format !== "google-import") {
     return { ok: false, reason: "Googleカレンダー取り込み用のファイルではありません（app / format が違います）" };
   }
