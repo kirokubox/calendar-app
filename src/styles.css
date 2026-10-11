@@ -159,7 +159,7 @@ button { cursor: pointer; }
 /* 入力シート：タブ・ながら・人・場所 */
 .pane { display: flex; flex-direction: column; gap: 12px; }
 .pane[hidden] { display: none; }
-.tabs { align-self: stretch; display: flex; }
+.tabs { align-self: stretch; display: flex; flex: none; }
 .tabs button { flex: 1; padding: 8px 6px; font-size: 0.85rem; }
 .field-label { font-size: 0.85rem; color: var(--muted); }
 .chip-input { display: flex; flex-direction: column; gap: 6px; }
