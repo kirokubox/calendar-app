@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
+import { COLOR_KEYS, FIXED_MARKERS, FIXED_NAGARA, FOUR_DAY_HOUR_HEIGHT, HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
 import {
-  addDays, addMonths, dateKeyOf, formatDayLabel, weekendClass, formatMonthLabel, formatWeekRangeLabel, startOfMonth, startOfWeek, toLocal, weekDayKeys,
+  addDays, addMinutes, addMonths, dateKeyOf, diffMinutes, formatDayLabel, formatMonthLabel, formatRangeLabel, formatWeekRangeLabel, fourDayKeys,
+  startOfMonth, startOfWeek, timePart, toLocal, weekDayKeys, weekendClass,
 } from "./dateUtils";
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
 import { allDayEventsOn } from "./layout";
+import { markerCandidates, markersForDay } from "./markerLogic";
+import { eventDefaults } from "./migrate";
 import {
   applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, revisionsOfPlan,
   shouldRecordRevision, unlinkActuals,
@@ -14,36 +17,66 @@ import {
   splitRuleFrom, withRemovedDate,
 } from "./recurrence";
 import { holidayName } from "./holidays";
-import { buildNagaraSave, layoutSessions, nagaraIdsOfEvent, nagaraLabelMap, sessionSegmentsForDay, type NagaraDraft } from "./nagaraLogic";
 import {
-  commitChanges, deleteNagara, getAllEvents, getAllNagara, getAllRecurrences, getAllRevisions, getSettings, newId, putNagara,
-  requestPersistentStorage, restoreAll, saveSettings, type Changes,
+  buildNagaraSave, isSession, layoutSessions, nagaraIdsOfEvent, nagaraLabelMap, nagaraLabelSuggestions, ongoingSessions, sessionLabelsOverlapping,
+  sessionSegmentsForDay, type NagaraDraft,
+} from "./nagaraLogic";
+import {
+  commitChanges, deleteMarker, deleteNagara, getActiveSleep, getAllEvents, getAllMarkers, getAllNagara, getAllRecurrences, getAllRevisions, getSettings,
+  newId, putMarker, putNagara, requestPersistentStorage, restoreAll, saveActiveSleep, saveSettings, type Changes,
 } from "./storage";
 import EventModal, { type EditScope, type ModalTab } from "./EventModal";
 import EventBlock, { eventStyle } from "./EventBlock";
+import EventViewer from "./EventViewer";
+import MarkerPins from "./MarkerPins";
+import MarkerSheet from "./MarkerSheet";
 import MonthView from "./MonthView";
+import QuickPanel from "./QuickPanel";
 import ReviewView from "./ReviewView";
 import type { PeriodKind } from "./reviewLogic";
+import RunningBand from "./RunningBand";
+import SearchView from "./SearchView";
+import type { SearchQuery } from "./searchLogic";
 import SettingsView from "./SettingsView";
 import WeekView from "./WeekView";
 import { mergeById, settingsForRestore } from "./backup";
-import type { BackupFile, CalendarEvent, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types";
+import type { ActiveSleep, BackupFile, CalendarEvent, ColorId, Marker, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types";
 
-type ViewMode = "day" | "week" | "month";
+type ViewMode = "day" | "fourDay" | "week" | "month";
 type ModalState =
-  | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent }
+  | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent; ongoing?: boolean }
   | { mode: "edit"; event: CalendarEvent }
+  | { mode: "view"; event: CalendarEvent }
   | { mode: "session"; session: Nagara }
+  | { mode: "marker"; marker: Marker }
   | { mode: "rule"; rule: RecurrenceRule }
   | null;
 
-const VIEW_LABEL: Record<ViewMode, string> = { day: "日", week: "週", month: "月" };
+interface Toast {
+  id: number;
+  text: string;
+  actions: Array<{ label: string; run: () => void }>;
+}
+
+const VIEW_MODES: ViewMode[] = ["day", "fourDay", "week", "month"];
+const VIEW_LABEL: Record<ViewMode, string> = { day: "日", fourDay: "4日", week: "週", month: "月" };
+const VIEW_HOUR_HEIGHT: Record<ViewMode, number> = { day: HOUR_HEIGHT, fourDay: FOUR_DAY_HOUR_HEIGHT, week: WEEK_HOUR_HEIGHT, month: HOUR_HEIGHT };
+const TOAST_MS = 9000;
+const EMPTY_QUERY: SearchQuery = { text: "", field: "all", from: "", to: "", kind: "all" };
+
+/** 睡眠の記録に使う色：親カテゴリが「睡眠」の色（無ければ色1） */
+function sleepColorId(settings: Settings): ColorId {
+  const key = COLOR_KEYS.find((k) => settings.categoryParents[k] === "睡眠") ?? "1";
+  return key === "default" ? null : key;
+}
 
 export default function App() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [nagara, setNagara] = useState<Nagara[]>([]);
   const [revisions, setRevisions] = useState<PlanRevision[]>([]);
   const [recurrences, setRecurrences] = useState<RecurrenceRule[]>([]);
+  const [markers, setMarkers] = useState<Marker[]>([]);
+  const [activeSleep, setActiveSleep] = useState<ActiveSleep | null>(null);
   const [settings, setSettings] = useState<Settings>(defaultSettings());
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -51,10 +84,13 @@ export default function App() {
   const [dayKey, setDayKey] = useState(() => dateKeyOf(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [ruleMessage, setRuleMessage] = useState("");
-  const [view, setView] = useState<"calendar" | "settings" | "review">("calendar");
+  const [view, setView] = useState<"calendar" | "settings" | "review" | "search">("calendar");
   const [reviewKind, setReviewKind] = useState<PeriodKind>("week");
   const [reviewAnchor, setReviewAnchor] = useState(() => dateKeyOf(new Date()));
+  const [searchQuery, setSearchQuery] = useState<SearchQuery>(EMPTY_QUERY);
   const [modal, setModal] = useState<ModalState>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
   const laneRef = useRef<HTMLDivElement>(null);
@@ -62,6 +98,7 @@ export default function App() {
   /** 読み込み時に旧形式から補った（保存し直す）ルール */
   const migratedRuleIds = useRef<Set<string>>(new Set());
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const toastSeq = useRef(0);
 
   const nowLocal = toLocal(now);
   const todayKey = dateKeyOf(now);
@@ -69,8 +106,8 @@ export default function App() {
 
   useEffect(() => {
     requestPersistentStorage();
-    Promise.all([getAllEvents(), getAllNagara(), getAllRevisions(), getAllRecurrences(), getSettings()])
-      .then(([evs, ng, revs, recs, st]) => {
+    Promise.all([getAllEvents(), getAllNagara(), getAllRevisions(), getAllRecurrences(), getSettings(), getAllMarkers(), getActiveSleep()])
+      .then(([evs, ng, revs, recs, st, mks, sleep]) => {
         setEvents(evs);
         setNagara(ng);
         setRevisions(revs);
@@ -78,6 +115,8 @@ export default function App() {
         const normalized = recs.map((r) => normalizeRule(r as unknown as Record<string, unknown>, evs));
         migratedRuleIds.current = new Set(normalized.filter((n) => n.migrated).map((n) => n.rule.id));
         setRecurrences(normalized.map((n) => n.rule));
+        setMarkers(mks);
+        setActiveSleep(sleep);
         setSettings(st);
         setViewMode(st.startView);
         setLoaded(true);
@@ -100,7 +139,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
-  // 現在時刻（赤線）を更新。画面に戻ったときも更新
+  // 現在時刻（赤線・継続中の経過時間）を更新。画面に戻ったときも更新
   useEffect(() => {
     const tick = () => setNow(new Date());
     const timer = window.setInterval(tick, 30000);
@@ -112,9 +151,22 @@ export default function App() {
     };
   }, []);
 
+  // 保存後の「取り消す・時刻を直す」は、しばらくしたら自動で消す
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast((t) => (t && t.id === toast.id ? null : t)), TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (text: string, actions: Toast["actions"] = []) => {
+    toastSeq.current += 1;
+    setToast({ id: toastSeq.current, text, actions });
+  };
+
   const weekKeys = useMemo(() => weekDayKeys(dayKey, weekStartDay), [dayKey, weekStartDay]);
+  const fourKeys = useMemo(() => fourDayKeys(dayKey), [dayKey]);
   const isCurrent =
-    viewMode === "day" ? dayKey === todayKey
+    viewMode === "day" || viewMode === "fourDay" ? dayKey === todayKey
     : viewMode === "week" ? startOfWeek(dayKey, weekStartDay) === startOfWeek(todayKey, weekStartDay)
     : startOfMonth(dayKey) === startOfMonth(todayKey);
 
@@ -123,26 +175,38 @@ export default function App() {
     const el = scrollRef.current;
     if (!el || !loaded || view !== "calendar" || viewMode === "month") return;
     const today = dateKeyOf(new Date());
-    const includesToday = viewMode === "day" ? dayKey === today : weekKeys.includes(today);
+    const includesToday = viewMode === "day" ? dayKey === today : viewMode === "fourDay" ? fourKeys.includes(today) : weekKeys.includes(today);
+    const hourHeight = VIEW_HOUR_HEIGHT[viewMode];
     if (includesToday) {
       const n = new Date();
-      const hourHeight = viewMode === "week" ? WEEK_HOUR_HEIGHT : HOUR_HEIGHT;
       const y = ((n.getHours() * 60 + n.getMinutes()) / 60) * hourHeight;
       el.scrollTop = Math.max(0, y - el.clientHeight * 0.4);
     } else {
-      el.scrollTop = 7 * (viewMode === "week" ? WEEK_HOUR_HEIGHT : HOUR_HEIGHT);
+      el.scrollTop = 7 * hourHeight;
     }
-  }, [dayKey, loaded, view, viewMode, weekKeys]);
+  }, [dayKey, loaded, view, viewMode, weekKeys, fourKeys]);
 
   const linked = useMemo(() => linkedPlanIds(events), [events]);
   const dayLayout = useMemo(() => layoutDayWithPlans(events, dayKey, linked), [events, dayKey, linked]);
   const allDayEvents = useMemo(() => allDayEventsOn(events, dayKey), [events, dayKey]);
-  const sessionSegs = useMemo(() => layoutSessions(sessionSegmentsForDay(nagara, dayKey)), [nagara, dayKey]);
+  const sessionSegs = useMemo(() => layoutSessions(sessionSegmentsForDay(nagara, dayKey, nowLocal)), [nagara, dayKey, nowLocal]);
+  const dayMarkers = useMemo(() => markersForDay(markers, dayKey), [markers, dayKey]);
   const labelsByEvent = useMemo(() => nagaraLabelMap(nagara), [nagara]);
+  const running = useMemo(() => ongoingSessions(nagara), [nagara]);
+  const markerLabels = useMemo(() => markerCandidates(FIXED_MARKERS, markers), [markers]);
+  const sessionLabels = useMemo(() => {
+    const busy = new Set(running.map((n) => n.label));
+    const recent = nagaraLabelSuggestions(nagara.filter(isSession), "nagara", 4);
+    return [...new Set([...FIXED_NAGARA, ...recent])].filter((l) => !busy.has(l));
+  }, [nagara, running]);
 
-  const openNew = useCallback((range: Range, tab: ModalTab = "event") => setModal({ mode: "new", range, tab }), []);
+  const openNew = useCallback((range: Range, tab: ModalTab = "event", ongoing = false) => setModal({ mode: "new", range, tab, ongoing }), []);
 
-  const onPlus = () => openNew(rangeForPlusButton(events, dayKey, toLocal(new Date())));
+  /** 実績・種別不明はまず閲覧モード、予定は従来どおり操作つきの編集シート */
+  const openEvent = useCallback((e: CalendarEvent) => setModal(e.kind === "plan" ? { mode: "edit", event: e } : { mode: "view", event: e }), []);
+
+  // ＋ボタン：今日を見ているときにセッションへ切り替えたら、終了を入れない「継続中」から始める
+  const onPlus = () => openNew(rangeForPlusButton(events, dayKey, toLocal(new Date())), "event", dayKey === todayKey);
 
   const minutesAt = (ev: React.MouseEvent<HTMLDivElement>, el: HTMLDivElement | null) => {
     const rect = el?.getBoundingClientRect();
@@ -274,15 +338,142 @@ export default function App() {
     await commit({ putEvents: [...create, ...update] });
   };
 
-  const handleSaveSession = async (n: Nagara) => {
+  const storeSession = async (n: Nagara) => {
     await putNagara(n);
     setNagara((prev) => [...prev.filter((x) => x.id !== n.id), n]);
+  };
+
+  const removeSession = async (id: string) => {
+    await deleteNagara(id);
+    setNagara((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleSaveSession = async (n: Nagara) => {
+    await storeSession(n);
     setModal(null);
   };
 
   const handleDeleteSession = async (id: string) => {
-    await deleteNagara(id);
-    setNagara((prev) => prev.filter((n) => n.id !== id));
+    await removeSession(id);
+    setModal(null);
+  };
+
+  const reportError = (e: unknown) => showToast(e instanceof Error ? `保存できませんでした：${e.message}` : "保存できませんでした");
+
+  /** ながらを始める：終了を入れない「継続中」のセッションを、いまの時刻で作る */
+  const startSession = async (label: string) => {
+    setQuickOpen(false);
+    const stamp = new Date().toISOString();
+    const n: Nagara = { id: newId(), label, type: "nagara", eventId: null, start: toLocal(new Date()), end: null, createdAt: stamp, updatedAt: stamp };
+    try {
+      await storeSession(n);
+      showToast(`「${label}」を ${timePart(n.start as string)} から記録中`, [
+        { label: "取り消す", run: () => { void removeSession(n.id).catch(reportError); setToast(null); } },
+        { label: "時刻を直す", run: () => { setModal({ mode: "session", session: n }); setToast(null); } },
+      ]);
+    } catch (e) {
+      reportError(e);
+    }
+  };
+
+  /** 今で終了：継続中のセッションに、いまの時刻を終了として入れる（あとから直せる） */
+  const endSession = async (n: Nagara) => {
+    const current = toLocal(new Date());
+    const start = n.start as string;
+    const ended: Nagara = { ...n, end: current > start ? current : addMinutes(start, 1), updatedAt: new Date().toISOString() };
+    try {
+      await storeSession(ended);
+      showToast(`「${n.label}」を ${timePart(ended.end as string)} で終了`, [
+        { label: "元に戻す", run: () => { void storeSession(n).catch(reportError); setToast(null); } },
+        { label: "時刻を直す", run: () => { setModal({ mode: "session", session: ended }); setToast(null); } },
+      ]);
+    } catch (e) {
+      reportError(e);
+    }
+  };
+
+  const storeMarker = async (m: Marker) => {
+    await putMarker(m);
+    setMarkers((prev) => [...prev.filter((x) => x.id !== m.id), m]);
+  };
+
+  const removeMarker = async (id: string) => {
+    await deleteMarker(id);
+    setMarkers((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  /** マーカー：入力シートを開かず、いまの時刻でそのまま保存する */
+  const addMarker = async (label: string) => {
+    setQuickOpen(false);
+    const stamp = new Date().toISOString();
+    const m: Marker = { id: newId(), label, at: toLocal(new Date()), createdAt: stamp, updatedAt: stamp };
+    try {
+      await storeMarker(m);
+      showToast(`「${label}」${timePart(m.at)} を記録`, [
+        { label: "取り消す", run: () => { void removeMarker(m.id).catch(reportError); setToast(null); } },
+        { label: "時刻を直す", run: () => { setModal({ mode: "marker", marker: m }); setToast(null); } },
+      ]);
+    } catch (e) {
+      reportError(e);
+    }
+  };
+
+  const changeSleep = async (sleep: ActiveSleep | null) => {
+    await saveActiveSleep(sleep);
+    setActiveSleep(sleep);
+  };
+
+  /** 就寝・仮眠：記録中の睡眠を始める（起床を押すまで、イベントはまだ作らない） */
+  const startSleep = async (nap: boolean) => {
+    setQuickOpen(false);
+    const sleep: ActiveSleep = { start: toLocal(new Date()), nap };
+    try {
+      await changeSleep(sleep);
+      showToast(`${nap ? "仮眠" : "就寝"} ${timePart(sleep.start)} を記録`, [
+        { label: "取り消す", run: () => { void changeSleep(null).catch(reportError); setToast(null); } },
+      ]);
+    } catch (e) {
+      reportError(e);
+    }
+  };
+
+  /** 起床：就寝からいままでを、睡眠（仮眠）の実績イベントとして塗る */
+  const wake = async () => {
+    setQuickOpen(false);
+    const sleep = activeSleep;
+    if (!sleep) return;
+    const current = toLocal(new Date());
+    const stamp = new Date().toISOString();
+    const title = sleep.nap ? "仮眠" : "睡眠";
+    const event: CalendarEvent = {
+      ...eventDefaults(),
+      id: newId(), title, start: sleep.start, end: current > sleep.start ? current : addMinutes(sleep.start, 1), allDay: false,
+      colorId: sleepColorId(settings), kind: "actual", subcategory: title, createdAt: stamp, updatedAt: stamp,
+    };
+    try {
+      await commit({ putEvents: [event] });
+      await changeSleep(null);
+      showToast(`${title} ${timePart(event.start)}–${timePart(event.end)} を記録`, [
+        { label: "開く", run: () => { setModal({ mode: "view", event }); setToast(null); } },
+      ]);
+    } catch (e) {
+      reportError(e);
+    }
+  };
+
+  const cancelSleep = () => {
+    if (!activeSleep) return;
+    if (!window.confirm(`記録中の${activeSleep.nap ? "仮眠" : "睡眠"}を取り消しますか？\n（${activeSleep.start.replace("T", " ")} から。睡眠の記録は作られません）`)) return;
+    void changeSleep(null).catch(reportError);
+  };
+
+  const handleSaveMarker = async (m: Marker) => {
+    await storeMarker(m);
+    setModal(null);
+  };
+
+  const handleDeleteMarker = async (id: string) => {
+    await removeMarker(id);
     setModal(null);
   };
 
@@ -293,16 +484,24 @@ export default function App() {
 
   const handleRestore = async (backup: BackupFile, sourceVersion: 1 | 2) => {
     const nextSettings = settingsForRestore(backup, sourceVersion, settings);
-    await restoreAll({ events: backup.events, nagara: backup.nagara, revisions: backup.revisions, recurrences: backup.recurrences, settings: nextSettings });
+    await restoreAll({
+      events: backup.events, nagara: backup.nagara, revisions: backup.revisions, recurrences: backup.recurrences, markers: backup.markers, settings: nextSettings,
+    });
     setEvents((prev) => mergeById(prev, backup.events));
     setNagara((prev) => mergeById(prev, backup.nagara));
     setRevisions((prev) => mergeById(prev, backup.revisions));
     setRecurrences((prev) => mergeById(prev, backup.recurrences));
+    setMarkers((prev) => mergeById(prev, backup.markers));
     setSettings(nextSettings);
   };
 
   const step = (dir: 1 | -1) => {
-    setDayKey(viewMode === "day" ? addDays(dayKey, dir) : viewMode === "week" ? addDays(dayKey, 7 * dir) : addMonths(dayKey, dir));
+    setDayKey(
+      viewMode === "day" ? addDays(dayKey, dir)
+      : viewMode === "fourDay" ? addDays(dayKey, 4 * dir)
+      : viewMode === "week" ? addDays(dayKey, 7 * dir)
+      : addMonths(dayKey, dir),
+    );
   };
 
   const onTouchStart = (ev: React.TouchEvent) => {
@@ -314,7 +513,7 @@ export default function App() {
     const start = touchStart.current;
     touchStart.current = null;
     const t = ev.changedTouches[0];
-    if (!start || !t || modal !== null) return;
+    if (!start || !t || modal !== null || quickOpen) return;
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
@@ -334,7 +533,41 @@ export default function App() {
     );
   }
 
-  const modalEl = modal && (
+  const closeModal = () => setModal(null);
+  let modalEl: React.ReactNode = null;
+  if (modal?.mode === "view") {
+    // 閲覧中に内容が変わっても、いまの記録を出す
+    const e = events.find((x) => x.id === modal.event.id) ?? modal.event;
+    const plan = e.planId ? events.find((x) => x.id === e.planId) ?? null : null;
+    const sameplan = e.planId ? events.filter((x) => x.planId === e.planId) : [];
+    const attached = labelsByEvent.get(e.id) ?? [];
+    modalEl = (
+      <EventViewer
+        key={`view-${e.id}`}
+        event={e}
+        plan={plan}
+        siblings={plan ? { count: sameplan.length, minutes: sameplan.reduce((sum, x) => sum + (x.allDay ? 0 : diffMinutes(x.start, x.end)), 0) } : null}
+        nagaraLabels={attached}
+        sessionLabels={e.allDay ? [] : sessionLabelsOverlapping(nagara, e.start, e.end, nowLocal).filter((l) => !attached.includes(l))}
+        settings={settings}
+        onEdit={() => setModal({ mode: "edit", event: e })}
+        onClose={closeModal}
+      />
+    );
+  } else if (modal?.mode === "marker") {
+    modalEl = (
+      <MarkerSheet
+        key={`marker-${modal.marker.id}`}
+        marker={modal.marker}
+        markers={markers}
+        candidates={markerLabels}
+        onSave={handleSaveMarker}
+        onDelete={handleDeleteMarker}
+        onClose={closeModal}
+      />
+    );
+  } else if (modal) {
+    modalEl = (
       <EventModal
         key={modal.mode === "edit" ? modal.event.id : modal.mode === "session" ? modal.session.id : modal.mode === "rule" ? `rule-${modal.rule.id}` : `new-${modal.range.start}-${modal.template?.id ?? ""}`}
         mode={modal.mode}
@@ -345,6 +578,7 @@ export default function App() {
         session={modal.mode === "session" ? modal.session : null}
         range={modal.mode === "new" ? modal.range : null}
         initialTab={modal.mode === "new" ? modal.tab : "event"}
+        sessionOngoing={modal.mode === "new" ? modal.ongoing ?? false : false}
         template={modal.mode === "new" ? modal.template ?? null : null}
         revisions={modal.mode === "edit" ? revisionsOfPlan(revisions, modal.event.id) : []}
         linkedActualCount={modal.mode === "edit" ? events.filter((e) => e.planId === modal.event.id).length : 0}
@@ -361,8 +595,17 @@ export default function App() {
         onRecordActual={(plan) => setModal({ mode: "new", range: { start: plan.start, end: plan.end }, tab: "event", template: plan })}
         onSaveSession={handleSaveSession}
         onDeleteSession={handleDeleteSession}
-        onClose={() => setModal(null)}
+        onClose={closeModal}
       />
+    );
+  }
+
+  const toastEl = toast && (
+    <div className="toast" role="status">
+      <span className="toast-text">{toast.text}</span>
+      {toast.actions.map((a) => <button key={a.label} type="button" className="toast-btn" onClick={a.run}>{a.label}</button>)}
+      <button type="button" className="toast-btn close" aria-label="閉じる" onClick={() => setToast(null)}>×</button>
+    </div>
   );
 
   if (view === "review") {
@@ -377,9 +620,32 @@ export default function App() {
           anchor={reviewAnchor}
           onChange={(k, a) => { setReviewKind(k); setReviewAnchor(a); }}
           onBack={() => setView("calendar")}
-          onOpenEvent={(e) => setModal({ mode: "edit", event: e })}
+          onOpenEvent={openEvent}
         />
         {modalEl}
+        {toastEl}
+      </div>
+    );
+  }
+
+  if (view === "search") {
+    return (
+      <div className="app">
+        <SearchView
+          events={events}
+          nagara={nagara}
+          markers={markers}
+          settings={settings}
+          nowLocal={nowLocal}
+          query={searchQuery}
+          onQuery={setSearchQuery}
+          onBack={() => setView("calendar")}
+          onOpenEvent={openEvent}
+          onOpenSession={(n) => setModal({ mode: "session", session: n })}
+          onOpenMarker={(m) => setModal({ mode: "marker", marker: m })}
+        />
+        {modalEl}
+        {toastEl}
       </div>
     );
   }
@@ -393,6 +659,8 @@ export default function App() {
           nagara={nagara}
           revisions={revisions}
           recurrences={recurrences}
+          markers={markers}
+          activeSleep={activeSleep}
           ruleMessage={ruleMessage}
           onBack={() => { setRuleMessage(""); setView("calendar"); }}
           onSaveSettings={handleSaveSettings}
@@ -404,14 +672,20 @@ export default function App() {
           onImportGoogle={handleImportGoogle}
         />
         {modalEl}
+        {toastEl}
       </div>
     );
   }
 
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const dayHoliday = viewMode === "day" ? holidayName(dayKey) : null;
-  const headLabel = viewMode === "day" ? formatDayLabel(dayKey) : viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay) : formatMonthLabel(dayKey);
-  const stepName = VIEW_LABEL[viewMode];
+  const headLabel =
+    viewMode === "day" ? formatDayLabel(dayKey)
+    : viewMode === "fourDay" ? formatRangeLabel(fourKeys[0], fourKeys[3])
+    : viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay)
+    : formatMonthLabel(dayKey);
+  const stepName = viewMode === "fourDay" ? "4日間" : VIEW_LABEL[viewMode];
+  const multiDay = viewMode === "week" || viewMode === "fourDay";
 
   return (
     <div className="app">
@@ -419,7 +693,7 @@ export default function App() {
         <div className="topbar-row">
           <button type="button" className="icon-btn" aria-label={`前の${stepName}`} onClick={() => step(-1)}>◀</button>
           <label className="date-jump" title="日付を選ぶ">
-            <span className={`date-label ${viewMode === "week" ? "small" : ""} ${viewMode === "day" ? weekendClass(dayKey) : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
+            <span className={`date-label ${multiDay ? "small" : ""} ${viewMode === "day" ? weekendClass(dayKey) : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
             <input
               type="date"
               value={dayKey}
@@ -435,14 +709,25 @@ export default function App() {
         </div>
         <div className="view-switch">
           <div className="segmented" role="group" aria-label="表示の切り替え">
-            {(["day", "week", "month"] as ViewMode[]).map((m) => (
+            {VIEW_MODES.map((m) => (
               <button key={m} type="button" className={viewMode === m ? "on" : ""} aria-pressed={viewMode === m} onClick={() => setViewMode(m)}>
                 {VIEW_LABEL[m]}
               </button>
             ))}
           </div>
+          <button type="button" className="icon-btn search-btn" aria-label="検索" onClick={() => setView("search")}>🔍</button>
         </div>
       </header>
+
+      <RunningBand
+        sessions={running}
+        sleep={activeSleep}
+        nowLocal={nowLocal}
+        onOpenSession={(n) => setModal({ mode: "session", session: n })}
+        onEndSession={(n) => void endSession(n)}
+        onWake={() => void wake()}
+        onCancelSleep={cancelSleep}
+      />
 
       <div className="calendar-swipe-area" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {viewMode === "day" && allDayEvents.length > 0 && (
@@ -450,7 +735,7 @@ export default function App() {
           <span className="allday-label">終日</span>
           <div className="allday-list">
             {allDayEvents.map((e) => (
-              <button key={e.id} type="button" className={`allday-chip ${e.kind === "plan" ? "plan" : ""}`} style={eventStyle(e)} onClick={() => setModal({ mode: "edit", event: e })}>
+              <button key={e.id} type="button" className={`allday-chip ${e.kind === "plan" ? "plan" : ""}`} style={eventStyle(e)} onClick={() => openEvent(e)}>
                 {displayTitle(e)}
               </button>
             ))}
@@ -477,7 +762,7 @@ export default function App() {
                   dayKey={dayKey}
                   variant={variant}
                   nagaraLabels={[]}
-                  onOpen={() => setModal({ mode: "edit", event: seg.event })}
+                  onOpen={() => openEvent(seg.event)}
                 />
               ))}
               {dayLayout.front.map((seg) => (
@@ -487,16 +772,17 @@ export default function App() {
                   dayKey={dayKey}
                   unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}
                   nagaraLabels={labelsByEvent.get(seg.event.id) ?? []}
-                  onOpen={() => setModal({ mode: "edit", event: seg.event })}
+                  onOpen={() => openEvent(seg.event)}
                 />
               ))}
+              <MarkerPins items={dayMarkers} hourHeight={HOUR_HEIGHT} mode="full" onOpen={(m) => setModal({ mode: "marker", marker: m })} />
               {dayKey === todayKey && <div className="now-line" style={{ top: (nowMin / 60) * HOUR_HEIGHT }}><i /></div>}
             </div>
             <div
               className="lane"
               ref={laneRef}
               onClick={onLaneClick}
-              aria-label="ながら・場所セッションのレーン"
+              aria-label="ながらセッションのレーン"
               style={{ width: LANE_WIDTH, backgroundSize: `100% ${HOUR_HEIGHT}px` }}
             >
               {sessionSegs.map((s) => {
@@ -507,7 +793,7 @@ export default function App() {
                   <button
                     key={`${n.id}-${dayKey}`}
                     type="button"
-                    className={`session ${n.type}`}
+                    className={`session ${n.type} ${n.end === null ? "ongoing" : ""}`}
                     style={{ top, height, left: `${(s.col / s.cols) * 100}%`, width: `calc(${100 / s.cols}% - 1px)` }}
                     title={`${n.type === "place" ? "場所" : "ながら"}：${n.label}`}
                     onClick={(ev) => { ev.stopPropagation(); setModal({ mode: "session", session: n }); }}
@@ -521,17 +807,22 @@ export default function App() {
         </div>
       )}
 
-      {viewMode === "week" && (
+      {multiDay && (
         <WeekView
-          dayKeys={weekKeys}
+          density={viewMode === "fourDay" ? "four" : "week"}
+          dayKeys={viewMode === "fourDay" ? fourKeys : weekKeys}
           events={events}
+          nagara={nagara}
+          markers={markers}
           labelsByEvent={labelsByEvent}
           linked={linked}
           nowLocal={nowLocal}
           todayKey={todayKey}
           nowMin={nowMin}
           scrollRef={scrollRef}
-          onOpenEvent={(e) => setModal({ mode: "edit", event: e })}
+          onOpenEvent={openEvent}
+          onOpenSession={(n) => setModal({ mode: "session", session: n })}
+          onOpenMarker={(m) => setModal({ mode: "marker", marker: m })}
           onCreate={(range) => openNew(range)}
           onOpenDay={openDay}
         />
@@ -542,9 +833,24 @@ export default function App() {
       )}
       </div>
 
+      <button type="button" className="fab fab-quick" aria-label="いまの時刻で記録（マーカー・ながら・睡眠）" aria-expanded={quickOpen} onClick={() => setQuickOpen((v) => !v)}>◆</button>
       <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}>＋</button>
 
+      {quickOpen && (
+        <QuickPanel
+          markerCandidates={markerLabels}
+          sessionCandidates={sessionLabels}
+          sleep={activeSleep}
+          onMarker={(label) => void addMarker(label)}
+          onStartSession={(label) => void startSession(label)}
+          onSleep={(nap) => void startSleep(nap)}
+          onWake={() => void wake()}
+          onClose={() => setQuickOpen(false)}
+        />
+      )}
+
       {modalEl}
+      {toastEl}
     </div>
   );
 }

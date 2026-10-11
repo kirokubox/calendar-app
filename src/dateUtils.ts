@@ -132,6 +132,16 @@ export function weekDayKeys(key: string, weekStartDay: number): string[] {
   return Array.from({ length: 7 }, (_, i) => addDays(first, i));
 }
 
+/** 4日表示の4日分：基準日の前日から、基準日の2日後まで（基準日が今日なら 昨日・今日・明日・明後日） */
+export function fourDayKeys(key: string): string[] {
+  return Array.from({ length: 4 }, (_, i) => addDays(key, i - 1));
+}
+
+/** 例：10/10(土)〜10/13(火) */
+export function formatRangeLabel(firstKey: string, lastKey: string): string {
+  return `${formatShortDate(firstKey)}〜${formatShortDate(lastKey)}`;
+}
+
 /** 月の1日 */
 export function startOfMonth(key: string): string {
   return `${key.slice(0, 7)}-01`;

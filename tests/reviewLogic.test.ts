@@ -188,7 +188,7 @@ test("ながら・場所：予定に付いたものは対象外、同ラベル�
   ];
   const s = computeReview(events, nagara, WEEK);
   assert.deepEqual(s.nagaraTotals, [{ label: "音楽", minutes: 90 }]);
-  assert.deepEqual(s.placeTotals, [{ label: "カフェ", minutes: 90 }]);
+  assert.deepEqual(s.placeTotals, [{ label: "カフェ", minutes: 90, sharedMinutes: 0 }]);
   assert.equal(s.cross.some((c) => c.label === "カフェ"), false, "場所はながらの重なりに入れない");
 });
 

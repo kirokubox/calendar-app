@@ -212,26 +212,39 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
             </div>
           )}
           <h3>ながら側から見る</h3>
-          <p className="hint">主行動として＝タイトルがラベルと完全一致する実績。その区間はながら側から除きます。</p>
+          <p className="hint">
+            主行動＝タイトルがラベルと同じ実績。流れに含む＝「A→B」「A/B」のタイトルの一部にラベルが出てくる実績の長さ（そのうちどれだけかは分かりません）。
+            ながら＝ながらの時間から、その2つに重なる区間を除いた時間。
+          </p>
           {stats.sideBySide.length === 0 ? <p className="hint">なし</p> : (
-            <table className="data-table">
-              <thead><tr><th>ラベル</th><th>主行動として</th><th>ながらとして</th></tr></thead>
-              <tbody>
-                {stats.sideBySide.map((s) => (
-                  <tr key={s.label}><td>{s.label}</td><td>{formatDuration(s.asMain)}</td><td>{formatDuration(s.asNagara)}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>ラベル</th><th>主行動</th><th>流れに含む</th><th>ながら</th></tr></thead>
+                <tbody>
+                  {stats.sideBySide.map((s) => (
+                    <tr key={s.label}><td>{s.label}</td><td>{formatDuration(s.asMain)}</td><td>{formatDuration(s.inFlow)}</td><td>{formatDuration(s.asNagara)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-          <h3>場所ごとの時間</h3>
+          <h3>場所・移動ごとの時間</h3>
+          <p className="hint">その場所だけ＝場所が1つのイベントと場所セッション。複数のうち＝場所を複数持つイベントの長さ（内訳は分からないので、足し合わせません）。</p>
           {stats.placeTotals.length === 0 ? <p className="hint">この期間の場所はありません。</p> : (
-            <table className="data-table">
-              <tbody>
-                {stats.placeTotals.map((p) => (
-                  <tr key={p.label}><td>{p.label}</td><td>{formatDuration(p.minutes)}（{formatPercent(p.minutes, total)}）</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>場所</th><th>その場所だけ</th><th>複数のうち</th></tr></thead>
+                <tbody>
+                  {stats.placeTotals.map((p) => (
+                    <tr key={p.label}>
+                      <td>{p.label}</td>
+                      <td>{formatDuration(p.minutes)}（{formatPercent(p.minutes, total)}）</td>
+                      <td>{p.sharedMinutes > 0 ? formatDuration(p.sharedMinutes) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 

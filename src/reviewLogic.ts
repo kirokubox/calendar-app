@@ -2,6 +2,7 @@
 import { PARENT_CATEGORIES } from "./constants.js";
 import { isHoliday } from "./holidays.js";
 import { addDays, addMonths, diffDays, formatMonthLabel, formatShortDate, startOfMonth, startOfWeek, toLocal } from "./dateUtils.js";
+import { titleTokens } from "./eventLogic.js";
 import { eventMap, resolveNagara } from "./nagaraLogic.js";
 import { diffSnapshots, isUnconfirmed, linkedPlanIds, snapshotOf, type SnapshotDiff } from "./planLogic.js";
 import type { CalendarEvent, Nagara, ParentCategory, PlanRevision, Settings } from "./types.js";
@@ -114,6 +115,10 @@ interface MainSpan extends Span {
   title: string;
   detailOverride: string | null;
   source: CalendarEvent["source"];
+  /** タイトルを「→」「/」で区切った要素 */
+  tokens: Set<string>;
+  /** 場所欄が乗り物・徒歩など、移動を表しているか */
+  moving: boolean;
 }
 interface LabelSpan extends Span {
   label: string;
@@ -134,13 +139,13 @@ function mergeSpans(spans: Span[]): Span[] {
  * ながら・場所を集計に使う時間（期間で切る前）。
  * 付いているイベントが集計対象（主行動）でなければ null。ただし終日の実績に付いたものは、ながら自身が時間を持つ場合だけ使う。
  */
-export function reviewNagaraInterval(n: Nagara, events: Map<string, CalendarEvent>): { start: string; end: string } | null {
+export function reviewNagaraInterval(n: Nagara, events: Map<string, CalendarEvent>, openEnd?: string): { start: string; end: string } | null {
   if (n.eventId !== null) {
     const ev = events.get(n.eventId);
     if (!ev || ev.kind === "plan" || ev.status === "cancelled") return null;
     if (ev.allDay && (n.start === null || n.end === null)) return null;
   }
-  return resolveNagara(n, events);
+  return resolveNagara(n, events, openEnd);
 }
 
 export interface DayStat {
@@ -164,11 +169,22 @@ export interface CrossRow {
   minutes: number;
 }
 
+/** 場所ごとの時間。場所が1つだけのイベント＋場所セッションと、複数の場所を持つイベントを分けて持つ（二重計上しない） */
+export interface PlaceMinutes {
+  label: string;
+  /** その場所だけにいた時間（場所が1つのイベント・場所セッション。重なりは1回だけ数える） */
+  minutes: number;
+  /** 複数の場所を持つイベントの時間（そのうちどれだけがこの場所かは分からない） */
+  sharedMinutes: number;
+}
+
 export interface SideBySide {
   label: string;
   /** 主行動として（タイトルが完全一致する実績）の時間 */
   asMain: number;
-  /** ながらとして。主行動がラベルと一致する区間は除く */
+  /** 主行動の流れに含む（「A→B」「A/B」のタイトルの一部に出てくる実績）の時間。切り替え時刻は分からないので配分しない */
+  inFlow: number;
+  /** ながらとして。主行動のタイトルにラベルが出てくる区間（完全一致・流れの一部）は除く */
   asNagara: number;
   /** ながらとしての合計（除く前） */
   nagaraTotal: number;
@@ -184,7 +200,7 @@ export interface ReviewStats {
   peopleMinutes: number;
   perDay: DayStat[];
   nagaraTotals: LabelMinutes[];
-  placeTotals: LabelMinutes[];
+  placeTotals: PlaceMinutes[];
   cross: CrossRow[];
   sideBySide: SideBySide[];
 }
@@ -212,26 +228,37 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
     mains.push({
       s, t, ev: e, key: colorKeyOf(e), people: e.people.length > 0, title: e.title.trim(),
       detailOverride: e.subcategory, source: e.source,
+      tokens: new Set(titleTokens(e.title)), moving: e.places.some((p) => MOVING_PLACE.test(p)),
     });
   }
+  // 継続中のセッションは、集計の終わり（現在の期間は現在時刻）まで続いているものとして数える
+  const openEnd = cutoff ?? `${period.end}T00:00`;
 
   // ながら・場所：ラベルごとに期間内の区間をまとめる（同じラベルの重なりは1つに）
   const nagaraSpans = new Map<string, Span[]>();
   const placeSpans = new Map<string, Span[]>();
+  const placeSharedSpans = new Map<string, Span[]>();
+  const pushSpan = (target: Map<string, Span[]>, label: string, sp: Span) => {
+    const list = target.get(label) ?? [];
+    list.push(sp);
+    target.set(label, list);
+  };
   if (detail) {
+    // イベントの場所欄：場所が1つならその場所の時間、複数なら「複数の場所のうちの1つ」として分けて数える
+    for (const m of mains) {
+      const places = [...new Set(m.ev.places.map((p) => p.trim()).filter((p) => p !== ""))];
+      for (const label of places) pushSpan(places.length === 1 ? placeSpans : placeSharedSpans, label, { s: m.s, t: m.t });
+    }
     const evMap = eventMap(events);
     for (const n of nagara) {
       const label = n.label.trim();
       if (label === "") continue;
-      const iv = reviewNagaraInterval(n, evMap);
+      const iv = reviewNagaraInterval(n, evMap, openEnd);
       if (!iv) continue;
       const s = Math.max(absMin(iv.start), P0);
       const t = Math.min(absMin(iv.end), P1);
       if (t <= s) continue;
-      const target = n.type === "place" ? placeSpans : nagaraSpans;
-      const list = target.get(label) ?? [];
-      list.push({ s, t });
-      target.set(label, list);
+      pushSpan(n.type === "place" ? placeSpans : nagaraSpans, label, { s, t });
     }
   }
   const mergedNagara: LabelSpan[] = [];
@@ -244,13 +271,13 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
     }
     nagaraTotals.push({ label, minutes: total });
   }
-  const placeTotals: LabelMinutes[] = [];
-  for (const [label, spans] of placeSpans) {
-    placeTotals.push({ label, minutes: mergeSpans(spans).reduce((sum, sp) => sum + (sp.t - sp.s), 0) });
-  }
+  const spanTotal = (spans: Span[] | undefined) => mergeSpans(spans ?? []).reduce((sum, sp) => sum + (sp.t - sp.s), 0);
+  const placeTotals: PlaceMinutes[] = [...new Set([...placeSpans.keys(), ...placeSharedSpans.keys()])].map((label) => ({
+    label, minutes: spanTotal(placeSpans.get(label)), sharedMinutes: spanTotal(placeSharedSpans.get(label)),
+  }));
   const byMinutesDesc = (a: LabelMinutes, b: LabelMinutes) => b.minutes - a.minutes || a.label.localeCompare(b.label);
   nagaraTotals.sort(byMinutesDesc);
-  placeTotals.sort(byMinutesDesc);
+  placeTotals.sort((a, b) => b.minutes + b.sharedMinutes - (a.minutes + a.sharedMinutes) || b.minutes - a.minutes || a.label.localeCompare(b.label));
 
   // スイープ（境目＝主行動・ながらの開始終了＋日の境目）
   const points = new Set<number>([P0, P1]);
@@ -281,6 +308,7 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
   const perDay: DayStat[] = dayKeys.map((date) => ({ date, byColor: {}, byDetail: {}, byNagara: {}, people: 0, unrecorded: 0 }));
   const crossMap = new Map<string, number>();
   const mainByTitle = new Map<string, number>();
+  const flowByLabel = new Map<string, number>();
   const nagaraOnly = new Map<string, number>();
   const nagaraLabelSet = new Set(nagaraTotals.map((x) => x.label));
 
@@ -314,7 +342,11 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
           peopleMinutes += share;
           day.people += share;
         }
-        if (detail && nagaraLabelSet.has(m.title)) mainByTitle.set(m.title, (mainByTitle.get(m.title) ?? 0) + share);
+        if (!detail) continue;
+        if (nagaraLabelSet.has(m.title)) mainByTitle.set(m.title, (mainByTitle.get(m.title) ?? 0) + share);
+        for (const token of m.tokens) {
+          if (token !== m.title && nagaraLabelSet.has(token)) flowByLabel.set(token, (flowByLabel.get(token) ?? 0) + share);
+        }
       }
     }
     if (!detail) continue;
@@ -325,12 +357,16 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
       } else {
         const share = len / k;
         for (const m of activeM) {
+          // そのラベル自体が主行動のときは、「主行動 × ながら」の組にしない
+          if (m.title === l.label) continue;
           const ck = `${m.key}${SEP}${l.label}`;
           crossMap.set(ck, (crossMap.get(ck) ?? 0) + share);
         }
       }
-      if (!activeM.some((m) => m.title === l.label)) nagaraOnly.set(l.label, (nagaraOnly.get(l.label) ?? 0) + len);
-      if (!activeM.some((m) => m.title === l.label)) day.byNagara[l.label] = (day.byNagara[l.label] ?? 0) + len;
+      // 主行動のタイトルにラベルが出てくる区間（完全一致・流れの一部）は、ながらとしては数えない
+      if (activeM.some((m) => m.title === l.label || m.tokens.has(l.label))) continue;
+      nagaraOnly.set(l.label, (nagaraOnly.get(l.label) ?? 0) + len);
+      day.byNagara[l.label] = (day.byNagara[l.label] ?? 0) + len;
     }
   }
 
@@ -343,12 +379,16 @@ export function computeReview(events: CalendarEvent[], nagara: Nagara[], period:
   const sideBySide: SideBySide[] = nagaraTotals.map((n) => ({
     label: n.label,
     asMain: mainByTitle.get(n.label) ?? 0,
+    inFlow: flowByLabel.get(n.label) ?? 0,
     asNagara: nagaraOnly.get(n.label) ?? 0,
     nagaraTotal: n.minutes,
   }));
 
   return { periodMinutes: P1 - P0, unrecorded, byColor, byDetail, peopleMinutes, perDay, nagaraTotals, placeTotals, cross, sideBySide };
 }
+
+/** 場所欄のうち、移動中を表す言葉（乗り物・徒歩） */
+const MOVING_PLACE = /電車|徒歩|バス|タクシー|自転車|新幹線|飛行機|移動|^車$/;
 
 /** 新規アプリ記録だけを自動で細分化する。Google過去データは従来の色区分を維持する。 */
 function subcategoryAt(m: MainSpan, minute: number): string {
@@ -357,11 +397,14 @@ function subcategoryAt(m: MainSpan, minute: number): string {
   const t = m.title;
   if (m.key === "1") return t.includes("仮眠") ? "仮眠" : "睡眠";
   if (m.key === "3") {
-    if (/通勤|移動|帰宅|外出|電車|徒歩/.test(t)) return "通勤・移動";
+    if (/通勤/.test(t)) return "通勤";
+    if (/移動|帰宅|外出|電車|徒歩/.test(t)) return "移動";
     if (/朝食|昼食|夕食|食事|ご飯|社食|外食|料理/.test(t)) return "食事";
     if (/身支度|準備|着替え|スキンケア|歯磨き/.test(t)) return "準備";
     if (/入浴|風呂|シャワー|サウナ/.test(t)) return "入浴・シャワー";
     if (/洗濯|食器|洗い物|掃除|ゴミ|家事/.test(t)) return "家事";
+    // タイトルに移動の言葉が無くても、場所欄が乗り物・徒歩なら移動
+    if (m.moving) return "移動";
     return "生活・その他";
   }
   if (m.key === "11") {

@@ -1,15 +1,21 @@
 import { migrateEvent, migrateSettings } from "./migrate.js";
-import type { CalendarEvent, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
+import type { ActiveSleep, CalendarEvent, Marker, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
 
 const DB_NAME = "calendar-app";
-/** 1: events / settings、2: nagara / revisions / recurrences を追加し、イベントと設定を v2 へ移行 */
-const DB_VERSION = 2;
+/**
+ * 1: events / settings、2: nagara / revisions / recurrences を追加し、イベントと設定を v2 へ移行、
+ * 3: markers を追加（既存のストアとデータには触れない）
+ */
+const DB_VERSION = 3;
 const EVENTS = "events";
 const SETTINGS = "settings";
 const NAGARA = "nagara";
 const REVISIONS = "revisions";
 const RECURRENCES = "recurrences";
+const MARKERS = "markers";
 const SETTINGS_KEY = "app";
+/** 記録中の睡眠（就寝を押してから起床を押すまで）。設定ストアの別キーに置く */
+const ACTIVE_SLEEP_KEY = "activeSleep";
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
@@ -24,6 +30,7 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(NAGARA)) db.createObjectStore(NAGARA, { keyPath: "id" });
       if (!db.objectStoreNames.contains(REVISIONS)) db.createObjectStore(REVISIONS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(RECURRENCES)) db.createObjectStore(RECURRENCES, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(MARKERS)) db.createObjectStore(MARKERS, { keyPath: "id" });
       // v1 → v2：既存イベントへ既定値を付け、設定に週の始まり・親カテゴリを足す
       if (tx && ev.oldVersion >= 1 && ev.oldVersion < 2) {
         const events = tx.objectStore(EVENTS);
@@ -41,7 +48,11 @@ function openDb(): Promise<IDBDatabase> {
         };
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // 新しい版が別タブで開かれたら、古い接続を閉じて更新を妨げない
+      req.result.onversionchange = () => { req.result.close(); dbPromise = null; };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
     req.onblocked = () => reject(new Error("別タブを閉じてから、アプリを開き直してください。"));
   });
@@ -143,6 +154,30 @@ export async function deleteNagara(id: string): Promise<void> {
   await run<undefined>(NAGARA, "readwrite", (s) => s.delete(id));
 }
 
+export async function getAllMarkers(): Promise<Marker[]> {
+  return run<Marker[]>(MARKERS, "readonly", (s) => s.getAll());
+}
+
+export async function putMarker(m: Marker): Promise<void> {
+  await run<IDBValidKey>(MARKERS, "readwrite", (s) => s.put(m));
+}
+
+export async function deleteMarker(id: string): Promise<void> {
+  await run<undefined>(MARKERS, "readwrite", (s) => s.delete(id));
+}
+
+export async function getActiveSleep(): Promise<ActiveSleep | null> {
+  const v = await run<unknown>(SETTINGS, "readonly", (s) => s.get(ACTIVE_SLEEP_KEY));
+  if (typeof v !== "object" || v === null) return null;
+  const r = v as Record<string, unknown>;
+  return typeof r.start === "string" ? { start: r.start, nap: r.nap === true } : null;
+}
+
+export async function saveActiveSleep(sleep: ActiveSleep | null): Promise<void> {
+  if (sleep === null) await run<undefined>(SETTINGS, "readwrite", (s) => s.delete(ACTIVE_SLEEP_KEY));
+  else await run<IDBValidKey>(SETTINGS, "readwrite", (s) => s.put(sleep, ACTIVE_SLEEP_KEY));
+}
+
 export async function putRevision(r: PlanRevision): Promise<void> {
   await run<IDBValidKey>(REVISIONS, "readwrite", (s) => s.put(r));
 }
@@ -157,11 +192,13 @@ export async function restoreAll(data: {
   nagara: Nagara[];
   revisions: PlanRevision[];
   recurrences: RecurrenceRule[];
+  markers: Marker[];
   settings: Settings;
 }): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction([EVENTS, NAGARA, REVISIONS, RECURRENCES, SETTINGS], "readwrite");
+    const tx = db.transaction([EVENTS, NAGARA, REVISIONS, RECURRENCES, MARKERS, SETTINGS], "readwrite");
+    for (const m of data.markers) tx.objectStore(MARKERS).put(m);
     for (const e of data.events) tx.objectStore(EVENTS).put(e);
     for (const n of data.nagara) tx.objectStore(NAGARA).put(n);
     for (const r of data.revisions) tx.objectStore(REVISIONS).put(r);

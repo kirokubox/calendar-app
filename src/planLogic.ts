@@ -1,5 +1,5 @@
 // 予定と実績の純粋ロジック（リンク判定・未確定判定・予定通りの複製・変更履歴）。繰り返しは recurrence.ts。
-import { timePart } from "./dateUtils.js";
+import { diffMinutes, timePart } from "./dateUtils.js";
 import { clipToDay, layoutColumns, type DaySegment, type PlacedSegment } from "./layout.js";
 import { eventDefaults } from "./migrate.js";
 import type { CalendarEvent, Nagara, PlanRevision, PlanSnapshot } from "./types.js";
@@ -150,6 +150,40 @@ export function applyCancel(plan: CalendarEvent, reason: string, stamp: string):
 /** キャンセルを取り消した予定 */
 export function applyUncancel(plan: CalendarEvent, stamp: string): CalendarEvent {
   return { ...plan, status: "active", cancelReason: "", updatedAt: stamp };
+}
+
+export interface PlanActualDiff {
+  /** 実績の開始 − 予定の開始（分）。プラス＝遅い */
+  startDelta: number;
+  /** 実績の終了 − 予定の終了（分）。プラス＝遅い */
+  endDelta: number;
+  planMinutes: number;
+  actualMinutes: number;
+  /** 時刻以外で変わった項目（タイトル・人・場所など） */
+  changes: SnapshotDiff[];
+}
+
+/** 実績と、そのもとになった予定との差。終日が絡むときは時刻の差を0にする */
+export function planActualDiff(plan: CalendarEvent, actual: CalendarEvent): PlanActualDiff {
+  const timed = !plan.allDay && !actual.allDay;
+  const changes = diffSnapshots(snapshotOf(plan), snapshotOf(actual))
+    .filter((d) => d.field !== "start" && d.field !== "end" && d.field !== "status" && d.field !== "cancelReason");
+  return {
+    startDelta: timed ? diffMinutes(plan.start, actual.start) : 0,
+    endDelta: timed ? diffMinutes(plan.end, actual.end) : 0,
+    planMinutes: diffMinutes(plan.start, plan.end),
+    actualMinutes: diffMinutes(actual.start, actual.end),
+    changes,
+  };
+}
+
+/** 例：+15分／−30分／予定どおり */
+export function formatDelta(minutes: number): string {
+  if (minutes === 0) return "予定どおり";
+  const m = Math.abs(minutes);
+  const h = Math.floor(m / 60);
+  const text = h === 0 ? `${m}分` : m % 60 === 0 ? `${h}時間` : `${h}時間${m % 60}分`;
+  return `${minutes > 0 ? "+" : "−"}${text}`;
 }
 
 /** 「予定：<タイトル 時刻>」表示用 */

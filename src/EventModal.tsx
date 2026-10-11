@@ -14,6 +14,7 @@ import { newId } from "./storage";
 import ChipInput from "./ChipInput";
 import NagaraChips from "./NagaraChips";
 import SessionForm from "./SessionForm";
+import { useBackdropClose } from "./useBackdropClose";
 import type { CalendarEvent, ColorId, EventKind, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types";
 
 export type ModalTab = "event" | "session";
@@ -27,6 +28,8 @@ interface Props {
   session: Nagara | null;
   range: Range | null;
   initialTab: ModalTab;
+  /** 新規のセッションを、終了を入れない「継続中」から始めるか */
+  sessionOngoing?: boolean;
   /** 予定から「実績を入力」で開いたときの元の予定（内容の初期値とリンク先） */
   template: CalendarEvent | null;
   /** 編集中の予定の変更履歴（新しい順） */
@@ -82,7 +85,7 @@ function sortedLabels(drafts: NagaraDraft[]): string {
 }
 
 export default function EventModal({
-  mode, event, session, range, initialTab, template, revisions, linkedActualCount, planOfActual, rule, occurrenceRule, events, nagara, settings, now,
+  mode, event, session, range, initialTab, sessionOngoing, template, revisions, linkedActualCount, planOfActual, rule, occurrenceRule, events, nagara, settings, now,
   onSave, onSaveRule, onDelete, onAsPlanned, onCancelPlan, onUncancelPlan, onRecordActual, onSaveSession, onDeleteSession, onClose,
 }: Props) {
   const isRule = mode === "rule" && rule != null;
@@ -146,6 +149,8 @@ export default function EventModal({
   const subcategoryList = useMemo(() => subcategorySuggestions(events), [events]);
   const nagaraList = useMemo(() => nagaraLabelSuggestions(nagara, "nagara"), [nagara]);
   const sessionLabelList = useMemo(() => nagaraLabelSuggestions(nagara), [nagara]);
+  // 外側のタップは「閉じる」と同じ扱い（保存しない）
+  const backdrop = useBackdropClose(onClose);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -374,7 +379,7 @@ export default function EventModal({
   const showTopSave = mode !== "session" && tab === "event" && askScope === null;
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" {...backdrop}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={heading}>
         <div className="sheet-head">
           <h2>{heading}</h2>
@@ -387,7 +392,7 @@ export default function EventModal({
         {mode === "new" && (
           <div className="segmented tabs" role="tablist" aria-label="入力の種類">
             <button type="button" role="tab" aria-selected={tab === "event"} className={tab === "event" ? "on" : ""} onClick={() => setTab("event")}>イベント</button>
-            <button type="button" role="tab" aria-selected={tab === "session"} className={tab === "session" ? "on" : ""} onClick={() => setTab("session")}>ながら・場所セッション</button>
+            <button type="button" role="tab" aria-selected={tab === "session"} className={tab === "session" ? "on" : ""} onClick={() => setTab("session")}>ながらセッション</button>
           </div>
         )}
 
@@ -541,7 +546,7 @@ export default function EventModal({
                     className="title-input compact-input"
                     type="text"
                     list="subcategory-suggestions"
-                    placeholder={isRule ? "例：定時" : "空欄なら新規の実績を自動分類"}
+                    placeholder={isRule ? "例：定時" : "空欄なら自動"}
                     value={subcategory}
                     onChange={(e) => setSubcategory(e.target.value)}
                   />
@@ -560,19 +565,27 @@ export default function EventModal({
               <div className="detail-col">
                 <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：友人" listId="people-suggestions" />
                 <ChipInput
-                  label="場所（順番あり）"
+                  label="場所・移動（順番あり）"
                   values={places}
                   onChange={setPlaces}
                   suggestions={placeList}
                   fixed={FIXED_PLACES}
-                  placeholder="例：店名"
+                  placeholder="例：店名、電車"
                   reorderable
                   listId="place-suggestions"
                 />
               </div>
             </div>
             <label className="field-label" htmlFor="memo-input">メモ</label>
-            <textarea id="memo-input" className="memo-input" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <textarea
+              id="memo-input"
+              className="memo-input"
+              rows={3}
+              value={memo}
+              placeholder="この出来事に直接ひもづく補足（例：4時半に一度起きた）"
+              onChange={(e) => setMemo(e.target.value)}
+            />
+            <p className="hint">1日全体の感想や長い日記は、季節日記へ。</p>
             {!isRule && (
               <>
                 <span className="field-label">種別</span>
@@ -615,7 +628,8 @@ export default function EventModal({
           </div>
         )}
 
-        {error && <p className="notice error" role="alert">{error}</p>}
+        {/* 開いた直後の「タイトルを入力してください」は出さない（保存ボタンが押せないことで分かる） */}
+        {error && title.trim() !== "" && <p className="notice error" role="alert">{error}</p>}
         {saveError && <p className="notice error" role="alert">{saveError}</p>}
 
         {askScope ? (
@@ -642,7 +656,15 @@ export default function EventModal({
 
         {mode !== "edit" && mode !== "rule" && (
           <div className="pane" hidden={tab !== "session"}>
-            <SessionForm session={session} range={range} labelSuggestions={sessionLabelList} onSave={onSaveSession} onDelete={onDeleteSession} />
+            <SessionForm
+              session={session}
+              range={range}
+              labelSuggestions={sessionLabelList}
+              now={now}
+              defaultOngoing={sessionOngoing}
+              onSave={onSaveSession}
+              onDelete={onDeleteSession}
+            />
           </div>
         )}
       </div>

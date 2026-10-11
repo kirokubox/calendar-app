@@ -41,10 +41,13 @@ button { cursor: pointer; }
   min-width: 44px; min-height: 44px; border: 0; background: transparent; border-radius: 10px; font-size: 1rem;
 }
 .icon-btn:active, .text-btn:active { background: #eef3fb; }
-.text-btn { padding: 0 10px; color: var(--accent-dark); font-weight: 600; }
+.text-btn { padding: 0 10px; color: var(--accent-dark); font-weight: 600; white-space: nowrap; flex: none; }
 .text-btn:disabled { color: #aab4c5; cursor: default; }
-.date-jump { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
-.date-label { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; }
+.text-btn.small { min-width: 0; min-height: 32px; padding: 0 8px; font-size: 0.85rem; }
+.topbar-row .icon-btn { flex: none; }
+/* 幅が足りないときは、ボタンを折り返さずに日付のラベルを縮める */
+.date-jump { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; min-width: 0; flex: 0 1 auto; }
+.date-label { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .date-jump input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
 /* 終日帯 */
@@ -74,11 +77,19 @@ button { cursor: pointer; }
 .event {
   position: absolute; border: 2px solid var(--c); background: var(--bg); color: var(--fg);
   border-radius: 6px; padding: 1px 5px; text-align: left; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start;
-  line-height: 1.25; min-width: 0;
+  line-height: var(--lh, 16px); min-width: 0;
 }
+/* 高さが足りないときに行が潰れないよう、縮めずに下から切る */
+.event > * { flex: none; }
 .event.plan { background: #ffffff; }
-.event-title { font-size: 0.8rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event-time { font-size: 0.7rem; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* タイトルは決めた行数まで折り返す（行数は EventBlock が高さから決める。最大3行） */
+.event-title {
+  font-size: 0.8rem; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1;
+  white-space: normal; word-break: break-all; overflow-wrap: anywhere;
+}
+.event-line { font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-people { font-weight: 700; }
+.event-time { opacity: 0.9; }
 .now-line { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid #e53935; pointer-events: none; z-index: 5; }
 .now-line i { position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: #e53935; }
 
@@ -94,6 +105,8 @@ button { cursor: pointer; }
   width: 100%; max-width: 640px; max-height: 92dvh; overflow-y: auto; background: var(--bg); border-radius: 18px 18px 0 0;
   padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px;
 }
+/* 中身がシートの高さを超えても、部品を縮めずにスクロールさせる（タブが線に潰れた不具合の再発防止） */
+.sheet > * { flex: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-head h2 { margin: 0; font-size: 1.05rem; }
 .title-input { width: 100%; font-size: 1.15rem; padding: 10px 12px; border: 1px solid #c9d3e3; border-radius: 10px; }
@@ -152,8 +165,10 @@ button { cursor: pointer; }
 .about { margin: 0; padding-left: 1.2em; font-size: 0.85rem; color: #374151; display: flex; flex-direction: column; gap: 4px; }
 
 /* 表示の切り替え */
-.view-switch { padding: 0 8px 6px; display: flex; justify-content: center; }
-.view-switch .segmented button { padding: 6px 22px; }
+.view-switch { padding: 0 8px 6px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.view-switch .segmented { grid-column: 2; }
+.view-switch .segmented button { padding: 6px 18px; white-space: nowrap; }
+.view-switch .search-btn { grid-column: 3; justify-self: end; min-height: 36px; }
 .date-label.small { font-size: 1rem; }
 
 /* 入力シート：タブ・ながら・人・場所 */
@@ -213,8 +228,16 @@ button { cursor: pointer; }
 .week-col { position: relative; border-left: 1px solid var(--line); touch-action: manipulation; min-width: 0; }
 .week-col.today { background: rgba(66, 133, 244, 0.05); }
 .week-events { position: absolute; inset: 0; }
-.event.compact { padding: 0 2px; border-width: 1px; border-radius: 4px; }
-.event.compact .event-title { font-size: 0.65rem; }
+.event.d-week { padding: 0 2px; border-width: 1px; border-radius: 4px; }
+.event.d-week .event-title { font-size: 0.65rem; }
+/* 4日表示：タイトル・ながら・場所を数行で読める大きさ */
+.event.d-four { padding: 1px 2px; border-width: 1px; border-radius: 4px; }
+.event.d-four .event-title { font-size: 0.68rem; }
+.event.d-four .event-line { font-size: 0.6rem; }
+.week-head.four .week-day-head { font-size: 0.82rem; }
+.week-head.four .week-day-head small { font-size: 0.66rem; }
+.week-lane { position: absolute; top: 0; bottom: 0; right: 0; border-left: 1px dashed var(--line); background: #fafcff; }
+.week-lane .session { font-size: 0.5rem; border-radius: 3px; }
 
 @media (max-width: 400px) {
   :root { --gutter: 38px; }
@@ -225,7 +248,8 @@ button { cursor: pointer; }
   .date-label.small { font-size: 0.82rem; }
   .week-head { grid-template-columns: var(--gutter) repeat(7, minmax(0, 1fr)); }
   .week-day-head { font-size: 0.64rem; }
-  .event.compact .event-title { font-size: 0.58rem; }
+  .event.d-week .event-title { font-size: 0.58rem; }
+  .view-switch .segmented button { padding: 6px 14px; }
 }
 
 /* 月表示 */
@@ -261,7 +285,8 @@ button { cursor: pointer; }
 .event.back { background: transparent; z-index: 0; box-shadow: none; }
 .event:not(.back) { z-index: 1; }
 .event.back.linked { border-color: var(--c); border-style: dashed; opacity: 0.35; }
-.event.back.cancelled { border-color: var(--c); opacity: 0.3; }
+/* キャンセルした予定は、手前の実績に上側を隠されやすいので、文字を下に寄せる */
+.event.back.cancelled { border-color: var(--c); opacity: 0.45; justify-content: flex-end; }
 .event.back.cancelled .event-title, .event.back.cancelled .event-time { text-decoration: line-through; }
 .event.back .event-title { font-weight: 500; }
 .badge-unconfirmed {
@@ -364,3 +389,96 @@ button { cursor: pointer; }
 .month-cell.other.sat .month-num, .month-cell.other.sun .month-num { opacity: 0.6; }
 .date-label.holiday, .week-day-head.holiday, .month-cell.holiday .month-num { color: #c62828; }
 .week-day-head.holiday.today, .month-cell.today.holiday .month-num { color: #fff; background: #c62828; }
+
+/* ---------- v0.4.0 ---------- */
+
+/* もとは予定だった実績の印 */
+.badge-plan {
+  display: inline-block; margin-right: 3px; padding: 0 3px; border: 1px solid currentColor; border-radius: 3px;
+  font-size: 0.62em; font-weight: 700; line-height: 1.35; vertical-align: 0.1em; background: rgba(255, 255, 255, 0.18);
+}
+/* 週表示は幅が狭いので、文字ではなく右上の折り返しで示す */
+.event.d-week.from-plan::after {
+  content: ""; position: absolute; top: 0; right: 0; border-style: solid; border-width: 0 7px 7px 0;
+  border-color: transparent rgba(255, 255, 255, 0.95) transparent transparent;
+}
+
+/* 継続中のセッション・睡眠の帯（どの日付の列にも属さない） */
+.running-band { flex: none; max-height: 138px; overflow-y: auto; border-bottom: 1px solid var(--line); background: #e6f4f1; }
+.running-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 12px; }
+.running-row + .running-row { border-top: 1px solid rgba(0, 0, 0, 0.06); }
+.running-row.sleep { background: #e8eaf6; }
+.running-row.long { background: #fff3cd; }
+.running-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; border: 0; background: transparent; padding: 2px 0; text-align: left; }
+.running-main b { font-size: 0.9rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.running-main b::before { content: "●"; color: #00897b; font-size: 0.6rem; margin-right: 5px; vertical-align: 0.15em; }
+.running-row.sleep .running-main b::before { color: #5c6bc0; }
+.running-main span { font-size: 0.72rem; color: #4b5563; }
+.running-row .primary-btn.small { flex: none; padding: 0 12px; white-space: nowrap; }
+.session.ongoing { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0 4px, transparent 4px 8px); }
+
+/* いまの時刻で記録（マーカー・ながら・睡眠） */
+.fab.fab-quick {
+  right: 22px; bottom: calc(84px + env(safe-area-inset-bottom)); width: 44px; height: 44px; font-size: 1rem; background: #263238;
+  box-shadow: 0 2px 8px rgba(38, 50, 56, 0.4);
+}
+.fab.fab-quick:active { background: #000; }
+.quick-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(15, 23, 42, 0.25); }
+.quick-panel {
+  position: absolute; left: 10px; right: 10px; bottom: calc(138px + env(safe-area-inset-bottom)); z-index: 31; max-height: 62dvh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; background: #fff; border-radius: 14px; box-shadow: 0 6px 24px rgba(15, 23, 42, 0.3);
+}
+.quick-panel > * { flex: none; }
+.quick-head { display: flex; align-items: center; justify-content: space-between; }
+.quick.solid { border-style: solid; min-height: 38px; padding: 6px 12px; font-size: 0.9rem; color: var(--text); font-weight: 600; }
+.quick.solid.nagara { border-color: #00897b; }
+.quick.solid.sleep { border-color: #5c6bc0; }
+.quick.on { border-style: solid; border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 700; }
+
+/* 保存後の「取り消す・時刻を直す」 */
+.toast {
+  position: absolute; left: 10px; right: 84px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 40; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 8px 10px; border-radius: 12px; background: #263238; color: #fff; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.35);
+}
+.toast-text { flex: 1 1 100%; font-size: 0.85rem; }
+.toast-btn { min-height: 34px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 8px; background: transparent; color: #fff; font-size: 0.82rem; font-weight: 700; }
+.toast-btn.close { margin-left: auto; border-color: transparent; font-size: 1rem; }
+
+/* マーカー（時刻だけの点） */
+.marker-pin { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed #263238; z-index: 4; pointer-events: none; }
+.marker-tag {
+  position: absolute; right: 0; top: -9px; height: 18px; max-width: 85%; display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 4px; pointer-events: auto;
+  border: 0; border-radius: 9px; background: #263238; color: #fff; font-size: 0.62rem; line-height: 18px; white-space: nowrap; overflow: hidden;
+}
+.marker-tag i { font-style: normal; font-size: 0.5rem; }
+.marker-tag span { overflow: hidden; text-overflow: ellipsis; }
+.marker-pin.m-label .marker-tag { top: -7px; height: 14px; max-width: 100%; padding: 0 3px 0 2px; font-size: 0.54rem; line-height: 14px; border-radius: 7px; }
+.marker-pin.m-dot .marker-tag { left: -1px; right: auto; top: -6px; width: 12px; height: 12px; padding: 0; justify-content: center; border-radius: 50%; }
+
+/* 閲覧モード */
+.view-title { margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 1.15rem; font-weight: 700; word-break: break-all; }
+.view-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+.view-when { margin: 0; font-size: 0.95rem; }
+.view-list { display: flex; flex-direction: column; gap: 4px; }
+.view-row { display: flex; gap: 10px; font-size: 0.9rem; }
+.view-key { width: 6.5em; flex: none; padding-top: 0.1em; font-size: 0.8rem; color: var(--muted); }
+.view-val { flex: 1; min-width: 0; word-break: break-all; }
+.view-memo p { margin: 4px 0 0; padding: 8px 10px; border-radius: 10px; background: #f6f8fc; font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+.view-plan { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: #f0f5ff; }
+.view-plan-label { margin: 0; font-weight: 700; }
+
+/* 検索 */
+.search-form { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 8px; }
+.search-form .title-input { font-size: 1rem; }
+.search-form .time-row input[type="date"] { min-width: 0; flex: 0 1 8.5em; }
+.search-body { gap: 10px; }
+.search-summary { padding: 8px 10px; border-radius: 10px; background: #f0f5ff; }
+.search-summary p { margin: 2px 0; font-size: 0.9rem; }
+.search-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.search-card { width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; text-align: left; }
+.search-card:active { background: #eef3fb; }
+.search-card.plan { border-style: dashed; }
+.search-when { font-size: 0.75rem; color: var(--muted); }
+.search-title { display: flex; align-items: baseline; gap: 6px; font-weight: 700; word-break: break-all; }
+.search-meta { font-size: 0.75rem; color: #4b5563; word-break: break-all; }
+.search-memo { font-size: 0.8rem; color: #374151; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; word-break: break-all; }

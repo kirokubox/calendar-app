@@ -1,6 +1,6 @@
 import type { ParentCategory, Settings } from "./types.js";
 
-export const APP_VERSION = "0.3.3";
+export const APP_VERSION = "0.4.0";
 export const BACKUP_APP_NAME = "calendar-app";
 
 export const COLOR_IDS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"] as const;
@@ -24,8 +24,10 @@ export const COLOR_HEX: Record<string, string> = {
 export const HOUR_HEIGHT = 56;
 /** 週表示は7日と約16時間をスマホ1画面で見渡せる密度にする */
 export const WEEK_HOUR_HEIGHT = 40;
-/** 週表示の各日右端に置くセッション帯 */
-export const WEEK_LANE_WIDTH = 8;
+/** 4日表示は、タイトル・ながら・場所を数行で読める密度にする */
+export const FOUR_DAY_HOUR_HEIGHT = 52;
+/** 4日表示の各日右端に置くセッション帯の幅（px） */
+export const FOUR_DAY_LANE_WIDTH = 13;
 /** 日表示の右端のセッションレーンの幅（px） */
 export const LANE_WIDTH = 30;
 
@@ -62,7 +64,11 @@ export const DB_SCHEMA_VERSION = 2;
 /** ながらの固定候補（履歴候補・自由入力と併用） */
 export const FIXED_NAGARA = ["YouTube", "音楽", "Spoon", "アニメ"];
 /** 場所の固定候補（履歴候補・自由入力と併用） */
-export const FIXED_PLACES = ["家", "職場", "カフェ"];
+export const FIXED_PLACES = ["家", "職場", "カフェ", "電車", "徒歩"];
+/** マーカーの固定候補（履歴候補・自由入力と併用） */
+export const FIXED_MARKERS = ["家を出た", "目的地着", "目的地発", "帰宅", "会社着", "会社発"];
+/** 継続中のセッション・睡眠を「長時間」として目立たせる分数 */
+export const LONG_RUNNING_MINUTES = 12 * 60;
 
 export function defaultSettings(): Settings {
   return {

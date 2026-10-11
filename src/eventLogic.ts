@@ -114,6 +114,46 @@ export function displayTitle(event: Pick<CalendarEvent, "title" | "people">): st
   return people.length > 0 ? `${people.join("・")}　${event.title}` : event.title;
 }
 
+/** タイトルを「→」「/」で区切った要素（前後の空白を除く・空は捨てる）。複合タイトルの中にあるラベルを見つけるために使う */
+export function titleTokens(title: string): string[] {
+  return title.split(/[→/／]/).map((t) => t.trim()).filter((t) => t !== "");
+}
+
+export interface BlockLines {
+  /** タイトルの最大行数（1〜3） */
+  titleLines: number;
+  /** 人を独立した1行目に出すか（false のときはタイトルの前に付ける） */
+  peopleLine: boolean;
+  nagaraLine: boolean;
+  placeLine: boolean;
+  timeLine: boolean;
+}
+
+/**
+ * ブロックの高さに入る行数から、何を何行で出すかを決める。
+ * 文字で埋め尽くさないよう、タイトルは最大3行。足りないときは 時刻 → 場所 → ながら → 人の行 の順に省く。
+ */
+export function blockLines(
+  availableLines: number,
+  has: { people: boolean; nagara: boolean; place: boolean },
+  opts: { time: boolean; maxTitleLines?: number } = { time: true },
+): BlockLines {
+  const max = opts.maxTitleLines ?? 3;
+  const lines = Math.max(1, Math.floor(availableLines));
+  let peopleLine = has.people;
+  let nagaraLine = has.nagara;
+  let placeLine = has.place;
+  const extras = () => Number(peopleLine) + Number(nagaraLine) + Number(placeLine);
+  if (lines < extras() + 1) placeLine = false;
+  if (lines < extras() + 1) nagaraLine = false;
+  if (lines < extras() + 1) peopleLine = false;
+  // 1行しか無いときは、人の行を作らずタイトルの前に付ける
+  if (lines < 2) peopleLine = false;
+  const rest = lines - extras();
+  const timeLine = opts.time && rest >= 2;
+  return { titleLines: Math.max(1, Math.min(max, rest - (timeLine ? 1 : 0))), peopleLine, nagaraLine, placeLine, timeLine };
+}
+
 /** 配列の項目を上下に入れ替える（範囲外は何もしない） */
 export function moveItem<T>(list: T[], index: number, delta: number): T[] {
   const to = index + delta;

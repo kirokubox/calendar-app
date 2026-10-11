@@ -19,6 +19,8 @@
 ## コード構成（要点）
 
 - 純粋ロジック（テスト対象）：`src/dateUtils.ts`（日付）、`src/layout.ts`（日の切り出し・列分割）、`src/eventLogic.ts`（終了日の自動翌日化・種別判定・候補・＋ボタンの範囲）、`src/backup.ts`（バックアップの検証とマージ）、`src/colors.ts`、`src/recurrence.ts`（繰り返しの生成・反映・分割・墓標）、`src/holidays.ts`（祝日の計算）
-- IndexedDB：`src/storage.ts`（DB名 `calendar-app`、ストア `events` / `settings`）
-- 画面：`src/App.tsx`（日表示）、`src/EventModal.tsx`（入力シート）、`src/SettingsView.tsx`（設定）
+- 純粋ロジック（v0.4.0で追加）：`src/markerLogic.ts`（マーカーの並びと経過時間）、`src/searchLogic.ts`（検索・前回日・回数）。継続中のセッションは `src/nagaraLogic.ts`、場所・「主行動の流れに含む」の集計は `src/reviewLogic.ts`
+- IndexedDB：`src/storage.ts`（DB名 `calendar-app`、DB_VERSION 3。ストア `events` / `nagara` / `revisions` / `recurrences` / `markers` / `settings`。記録中の睡眠は `settings` ストアの別キー）
+- 画面：`src/App.tsx`（日表示・全体のつなぎ）、`src/WeekView.tsx`（週・4日表示）、`src/EventBlock.tsx`（ブロックの行数と表示）、`src/EventModal.tsx`（入力シート）、`src/EventViewer.tsx`（閲覧モード）、`src/SearchView.tsx`（検索）、`src/QuickPanel.tsx`（いまの時刻で記録）、`src/RunningBand.tsx`（継続中の帯）、`src/MarkerSheet.tsx`（マーカーの修正）、`src/SettingsView.tsx`（設定）
+- シート（`.sheet`）やブロック（`.event`）は縦並びのflex。中に `overflow: hidden` の部品を足すと高さ0へ縮むので、直下の子は `flex: none` にしてある（v0.3.3のタブ潰れの原因）
 - 日時は `YYYY-MM-DDTHH:mm` のローカル時刻文字列で持つ。UTC変換しない

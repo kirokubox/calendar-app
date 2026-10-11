@@ -5,7 +5,7 @@ import { dateKeyOf, weekdayName } from "./dateUtils";
 import AiMarkdownSettings from "./AiMarkdownSettings";
 import GoogleImportSettings from "./GoogleImportSettings";
 import RecurrenceSettings from "./RecurrenceSettings";
-import type { BackupFile, CalendarEvent, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
+import type { ActiveSleep, BackupFile, CalendarEvent, Marker, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
 
 interface Props {
   settings: Settings;
@@ -13,6 +13,8 @@ interface Props {
   nagara: Nagara[];
   revisions: PlanRevision[];
   recurrences: RecurrenceRule[];
+  markers: Marker[];
+  activeSleep: ActiveSleep | null;
   ruleMessage: string;
   onBack: () => void;
   onSaveSettings: (settings: Settings) => Promise<void>;
@@ -25,7 +27,7 @@ interface Props {
 }
 
 export default function SettingsView({
-  settings, events, nagara, revisions, recurrences, ruleMessage, onBack, onSaveSettings, onAddRule, onEditRule, onToggleRule, onDeleteRecurrence, onRestore, onImportGoogle,
+  settings, events, nagara, revisions, recurrences, markers, activeSleep, ruleMessage, onBack, onSaveSettings, onAddRule, onEditRule, onToggleRule, onDeleteRecurrence, onRestore, onImportGoogle,
 }: Props) {
   const [labels, setLabels] = useState<Record<string, string>>({ ...settings.colorLabels });
   const [labelMessage, setLabelMessage] = useState("");
@@ -93,7 +95,7 @@ export default function SettingsView({
 
   const exportJson = () => {
     const now = new Date();
-    const backup = buildBackup(events, settings, now.toISOString(), { nagara, revisions, recurrences });
+    const backup = buildBackup(events, settings, now.toISOString(), { nagara, revisions, recurrences, markers });
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -230,6 +232,7 @@ export default function SettingsView({
               onChange={(e) => changeStartView(e.target.value as StartView)}
             >
               <option value="day">日</option>
+              <option value="fourDay">4日（昨日〜明後日）</option>
               <option value="week">週</option>
               <option value="month">月</option>
             </select>
@@ -246,13 +249,13 @@ export default function SettingsView({
           onDelete={onDeleteRecurrence}
         />
 
-        <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} />
+        <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} markers={markers} activeSleep={activeSleep} />
 
         <GoogleImportSettings events={events} onImport={onImportGoogle} />
 
         <section>
           <h2>バックアップ</h2>
-          <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所があります。</p>
+          <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所、{markers.length} 件のマーカーがあります。</p>
           <div className="inline-actions">
             <button type="button" className="secondary-btn" onClick={exportJson}>JSONで書き出す</button>
             <label className="secondary-btn file-btn">
@@ -271,7 +274,7 @@ export default function SettingsView({
                 ・書き出し日時 {pending.backup.exportedAt.slice(0, 16).replace("T", " ")}
               </p>
               <p className="hint">
-                同じidの予定・実績・ながらは上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます
+                同じidの予定・実績・ながら・マーカーは上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます
                 {pending.sourceVersion === 1 ? "（古い形式のバックアップなので、週の始まりと親カテゴリは今の設定のままです）" : ""}。
               </p>
               <div className="inline-actions">

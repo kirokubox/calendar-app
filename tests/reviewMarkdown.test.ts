@@ -32,7 +32,7 @@ test("週のMarkdown：5ブロックの構成・エスケープ・主行動な�
   ];
   const md = buildReviewMarkdown({ events, nagara, revisions: [], settings: defaultSettings(), period, nowLocal: "2026-10-20T09:00" });
   const headings = md.split("\n").filter((l) => l.startsWith("## ") || l.startsWith("# "));
-  assert.deepEqual(headings.map((h) => h.slice(0, 7)), ["# カレンダー", "## 1. 時間", "## 2. なが", "## 3. 予定", "## 4. キャ", "## 5. 日ご"].map((x) => x.slice(0, 7)));
+  assert.deepEqual(headings.map((h) => h.slice(0, 7)), ["# カレンダー", "## 1. 時間", "## 2. なが", "## 3. 予定", "## 4. キャ", "## 5. 日ご", "## 6. マー"].map((x) => x.slice(0, 7)));
   assert.ok(md.includes("散歩\\|外食"), "タイトルの | をエスケープ");
   assert.ok(md.includes("1行目<br>2行目"), "メモの改行をエスケープ");
   assert.ok(md.includes("主行動なし"), "主行動のない時間のながら");

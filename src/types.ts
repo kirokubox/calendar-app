@@ -44,6 +44,7 @@ export type NagaraType = "nagara" | "place";
 /**
  * ながら・場所。
  * eventIdあり・時間なし＝イベント全体／eventIdあり・時間あり＝イベント内の一部／eventIdなし・時間あり＝セッション
+ * セッションだけ、開始あり・終了なし（end が null）＝継続中 を持てる（v0.4.0〜）
  */
 export interface Nagara {
   id: string;
@@ -106,7 +107,23 @@ export interface RecurrenceRule {
   removedDates: string[];
 }
 
-export type StartView = "day" | "week" | "month";
+/** 時刻だけの記録（開場・家を出た など）。時間は塗らず、集計にも入れない */
+export interface Marker {
+  id: string;
+  label: string;
+  /** ローカル時刻文字列 YYYY-MM-DDTHH:mm */
+  at: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 就寝を押してから起床を押すまでの、記録中の睡眠。起床で睡眠イベントにする */
+export interface ActiveSleep {
+  start: string;
+  nap: boolean;
+}
+
+export type StartView = "day" | "fourDay" | "week" | "month";
 
 export type ParentCategory = "睡眠" | "生活" | "仕事" | "自由時間" | "その他";
 
@@ -130,5 +147,7 @@ export interface BackupFile {
   nagara: Nagara[];
   revisions: PlanRevision[];
   recurrences: RecurrenceRule[];
+  /** v0.4.0〜。無いバックアップは空として読む */
+  markers: Marker[];
   settings: Settings;
 }

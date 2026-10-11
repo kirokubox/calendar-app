@@ -2,24 +2,26 @@ import { useState } from "react";
 import { dateKeyOf, toLocal } from "./dateUtils";
 import { periodFileName, periodLabel, periodOf, shiftPeriod, type PeriodKind } from "./reviewLogic";
 import { buildReviewMarkdown } from "./reviewMarkdown";
-import type { CalendarEvent, Nagara, PlanRevision, Settings } from "./types";
+import type { ActiveSleep, CalendarEvent, Marker, Nagara, PlanRevision, Settings } from "./types";
 
 interface Props {
   settings: Settings;
   events: CalendarEvent[];
   nagara: Nagara[];
   revisions: PlanRevision[];
+  markers: Marker[];
+  activeSleep: ActiveSleep | null;
 }
 
 /** 設定画面の「AI用Markdown」：週・月を選んで .md を書き出す */
-export default function AiMarkdownSettings({ settings, events, nagara, revisions }: Props) {
+export default function AiMarkdownSettings({ settings, events, nagara, revisions, markers, activeSleep }: Props) {
   const [kind, setKind] = useState<PeriodKind>("week");
   const [anchor, setAnchor] = useState(() => dateKeyOf(new Date()));
   const [message, setMessage] = useState("");
 
   const period = periodOf(kind, anchor, settings.weekStartDay);
 
-  const build = () => buildReviewMarkdown({ events, nagara, revisions, settings, period, nowLocal: toLocal(new Date()) });
+  const build = () => buildReviewMarkdown({ events, nagara, revisions, markers, activeSleep, settings, period, nowLocal: toLocal(new Date()) });
 
   const download = () => {
     const blob = new Blob([build()], { type: "text/markdown;charset=utf-8" });
@@ -46,7 +48,7 @@ export default function AiMarkdownSettings({ settings, events, nagara, revisions
   return (
     <section>
       <h2>AI用Markdown（週・月）</h2>
-      <p className="hint">期間の時間構成・ながら・未確定の予定・日ごとの明細をまとめたMarkdownを書き出します。AIへの相談に貼れます。</p>
+      <p className="hint">期間の時間構成・ながら・場所・未確定の予定・日ごとの明細・マーカーをまとめたMarkdownを書き出します。AIへの相談に貼れます。</p>
       <div className="inline-actions">
         <div className="segmented" role="group" aria-label="期間の単位">
           {(["week", "month"] as PeriodKind[]).map((k) => (

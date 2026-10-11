@@ -83,8 +83,13 @@ test("v2の検証：ながら・履歴・繰り返しの不正値は理由つき
   assert.match(reason(b), /nagara\[0\]\.type/);
   b = clone(); b.nagara[1].end = "2026-10-08T15:00";
   assert.match(reason(b), /終了が開始以前/);
+  // セッションの終了なしは「継続中」として認める（v0.4.0〜）。イベントに付いたながらの片方だけは拒否
   b = clone(); b.nagara[1].end = null;
+  assert.equal(reason(b), "");
+  b = clone(); b.nagara[0].start = "2026-10-08T10:00";
   assert.match(reason(b), /両方/);
+  b = clone(); b.nagara[1].start = null;
+  assert.match(reason(b), /end だけ/);
   b = clone(); b.nagara[0].eventId = null;
   assert.match(reason(b), /指定がありません/);
   b = clone(); b.nagara.push(clone().nagara[0]);

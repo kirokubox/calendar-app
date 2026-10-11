@@ -2,19 +2,20 @@ import { BACKUP_APP_NAME, COLOR_IDS } from "./constants.js";
 import { isLocalDateTime } from "./dateUtils.js";
 import { migrateEvent, migrateSettings } from "./migrate.js";
 import { normalizeRule } from "./recurrence.js";
-import type { BackupFile, CalendarEvent, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
+import type { BackupFile, CalendarEvent, Marker, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
 
 export interface BackupExtras {
   nagara?: Nagara[];
   revisions?: PlanRevision[];
   recurrences?: RecurrenceRule[];
+  markers?: Marker[];
 }
 
 /** schemaVersion 2 のバックアップ（全ストア）を作る */
 export function buildBackup(events: CalendarEvent[], settings: Settings, exportedAt: string, extras: BackupExtras = {}): BackupFile {
   return {
     app: BACKUP_APP_NAME, schemaVersion: 2, exportedAt, events,
-    nagara: extras.nagara ?? [], revisions: extras.revisions ?? [], recurrences: extras.recurrences ?? [], settings,
+    nagara: extras.nagara ?? [], revisions: extras.revisions ?? [], recurrences: extras.recurrences ?? [], markers: extras.markers ?? [], settings,
   };
 }
 
@@ -78,7 +79,9 @@ function validateNagaraItem(v: unknown, index: number): string | Nagara {
   const end = v.end ?? null;
   if (start !== null && (typeof start !== "string" || !isLocalDateTime(start))) return `${at}.start が YYYY-MM-DDTHH:mm 形式ではありません`;
   if (end !== null && (typeof end !== "string" || !isLocalDateTime(end))) return `${at}.end が YYYY-MM-DDTHH:mm 形式ではありません`;
-  if ((start === null) !== (end === null)) return `${at} の start と end は両方指定するか両方空にしてください`;
+  // 開始だけあって終了が無いのは、継続中のセッション（イベントに属さないものだけ）
+  if (start === null && end !== null) return `${at} は end だけが指定されています`;
+  if (start !== null && end === null && eventId !== null) return `${at} の start と end は両方指定するか両方空にしてください`;
   if (start !== null && end !== null && end <= start) return `${at} の終了が開始以前です`;
   if (eventId === null && start === null) return `${at} はイベントも時間も指定がありません`;
   if (typeof v.createdAt !== "string" || typeof v.updatedAt !== "string") return `${at} の createdAt / updatedAt が文字列ではありません`;
@@ -86,6 +89,16 @@ function validateNagaraItem(v: unknown, index: number): string | Nagara {
     id: v.id, label: v.label, type: v.type, eventId,
     start: start as string | null, end: end as string | null, createdAt: v.createdAt, updatedAt: v.updatedAt,
   };
+}
+
+function validateMarkerItem(v: unknown, index: number): string | Marker {
+  const at = `markers[${index}]`;
+  if (!isRecord(v)) return `${at} がオブジェクトではありません`;
+  if (typeof v.id !== "string" || v.id === "") return `${at}.id が文字列ではありません`;
+  if (typeof v.label !== "string") return `${at}.label が文字列ではありません`;
+  if (typeof v.at !== "string" || !isLocalDateTime(v.at)) return `${at}.at が YYYY-MM-DDTHH:mm 形式ではありません`;
+  if (typeof v.createdAt !== "string" || typeof v.updatedAt !== "string") return `${at} の createdAt / updatedAt が文字列ではありません`;
+  return { id: v.id, label: v.label, at: v.at, createdAt: v.createdAt, updatedAt: v.updatedAt };
 }
 
 function validateRevisionItem(v: unknown, index: number): string | PlanRevision {
@@ -165,7 +178,14 @@ export function validateBackup(value: unknown): ValidationResult {
   let nagara: Nagara[] = [];
   let revisions: PlanRevision[] = [];
   let recurrences: RecurrenceRule[] = [];
+  let markers: Marker[] = [];
   if (sourceVersion === 2) {
+    // マーカーは v0.4.0 で追加。無いバックアップは空として読む
+    if (value.markers !== undefined) {
+      const m = validateList(value.markers, "markers", validateMarkerItem, (x) => x.id);
+      if (!m.ok) return m;
+      markers = m.items;
+    }
     const n = validateList(value.nagara, "nagara", validateNagaraItem, (x) => x.id);
     if (!n.ok) return n;
     const r = validateList(value.revisions, "revisions", validateRevisionItem, (x) => x.id);
@@ -192,7 +212,7 @@ export function validateBackup(value: unknown): ValidationResult {
     ok: true,
     sourceVersion,
     backup: {
-      app: BACKUP_APP_NAME, schemaVersion: 2, exportedAt: value.exportedAt, events: ev.items, nagara, revisions, recurrences,
+      app: BACKUP_APP_NAME, schemaVersion: 2, exportedAt: value.exportedAt, events: ev.items, nagara, revisions, recurrences, markers,
       settings: { schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents, startView: migrated.startView },
     },
   };

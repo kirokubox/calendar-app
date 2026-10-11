@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { datePart, formatShortDate, joinLocal, timePart } from "./dateUtils";
+import { addMinutes, datePart, formatShortDate, joinLocal, timePart } from "./dateUtils";
 import { deriveEndDate, isNextDay, shiftEnd } from "./eventLogic";
 import type { Range } from "./eventLogic";
+import { validateSession } from "./nagaraLogic";
 import { newId } from "./storage";
 import type { Nagara, NagaraType } from "./types";
 
@@ -9,20 +10,28 @@ interface Props {
   session: Nagara | null;
   range: Range | null;
   labelSuggestions: string[];
+  /** 現在のローカル時刻（YYYY-MM-DDTHH:mm） */
+  now: string;
+  /** 新規のとき、終了を入れない「継続中」から始めるか（開始は現在時刻にする） */
+  defaultOngoing?: boolean;
   onSave: (n: Nagara) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 const TYPE_LABEL: Record<NagaraType, string> = { nagara: "ながら", place: "場所" };
 
-/** ながら・場所セッション（eventIdなし・時間あり）の入力 */
-export default function SessionForm({ session, range, labelSuggestions, onSave, onDelete }: Props) {
+/** ながらセッション（eventIdなし・時間あり）の入力。終了を入れない「継続中」でも保存できる */
+export default function SessionForm({ session, range, labelSuggestions, now, defaultOngoing = false, onSave, onDelete }: Props) {
   const editing = session !== null;
-  const initStart = session?.start ?? range?.start ?? joinLocal("1970-01-01", "00:00");
-  const initEnd = session?.end ?? range?.end ?? initStart;
+  const startsOngoing = editing ? session.end === null : defaultOngoing;
+  const initStart = session?.start ?? (startsOngoing ? now : range?.start) ?? now;
+  // 継続中から「時刻を指定」へ切り替えたときの終了の初期値は、現在時刻（開始以前なら開始の1時間後）
+  const fallbackEnd = now > initStart ? now : addMinutes(initStart, 60);
+  const initEnd = session?.end ?? (startsOngoing ? fallbackEnd : range?.end ?? fallbackEnd);
 
   const [label, setLabel] = useState(session?.label ?? "");
   const [type, setType] = useState<NagaraType>(session?.type ?? "nagara");
+  const [ongoing, setOngoing] = useState(startsOngoing);
   const [startDate, setStartDate] = useState(datePart(initStart));
   const [startTime, setStartTime] = useState(timePart(initStart));
   const [endDate, setEndDate] = useState(datePart(initEnd));
@@ -35,7 +44,9 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
 
   const start = joinLocal(startDate, startTime);
   const end = joinLocal(endDate, endTime);
-  const error = label.trim() === "" ? "ラベルを入力してください" : end <= start ? "終了は開始より後にしてください" : null;
+  const error = validateSession(label, start, ongoing ? null : end);
+  // 場所セッションは新しく作らない（場所はイベントの場所欄へ入れる）。すでにあるものは種類を見せて編集できるままにする
+  const showType = editing && session.type === "place";
 
   const onStartDateChange = (value: string) => {
     if (!value) return;
@@ -60,8 +71,8 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
     if (!endDateTouched) setEndDate(deriveEndDate(startDate, startTime, value));
   };
 
-  const handleSave = async () => {
-    if (error || busy) return;
+  const save = async (endValue: string | null) => {
+    if (busy) return;
     setBusy(true);
     setSaveError("");
     const stamp = new Date().toISOString();
@@ -72,7 +83,7 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
         type,
         eventId: null,
         start,
-        end,
+        end: endValue,
         createdAt: session?.createdAt ?? stamp,
         updatedAt: stamp,
       });
@@ -80,6 +91,14 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
       setSaveError(e instanceof Error ? e.message : "保存できませんでした");
       setBusy(false);
     }
+  };
+
+  const handleSave = () => { if (!error) void save(ongoing ? null : end); };
+
+  /** 今で終了：現在時刻を終了にして保存する（開始以前なら開始の1分後） */
+  const handleEndNow = () => {
+    if (label.trim() === "") return;
+    void save(now > start ? now : addMinutes(start, 1));
   };
 
   const handleDelete = async () => {
@@ -99,7 +118,7 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
       <input
         className="title-input"
         type="text"
-        placeholder="ラベル（例：YouTube、カフェ）"
+        placeholder="ラベル（例：YouTube、音楽）"
         value={label}
         autoFocus={!editing}
         list="session-label-suggestions"
@@ -110,14 +129,20 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
         {labelSuggestions.map((t) => <option key={t} value={t} />)}
       </datalist>
 
-      <div className="segmented" role="group" aria-label="種類">
-        {(["nagara", "place"] as NagaraType[]).map((t) => (
-          <button key={t} type="button" className={type === t ? "on" : ""} aria-pressed={type === t} onClick={() => setType(t)}>
-            {TYPE_LABEL[t]}
-          </button>
-        ))}
-      </div>
-      <p className="hint">{type === "nagara" ? "並行していた行動（例：作業しながらYouTube）" : "その場所にいた時間（例：カフェ、外出）"}</p>
+      {showType && (
+        <div className="segmented" role="group" aria-label="種類">
+          {(["nagara", "place"] as NagaraType[]).map((t) => (
+            <button key={t} type="button" className={type === t ? "on" : ""} aria-pressed={type === t} onClick={() => setType(t)}>
+              {TYPE_LABEL[t]}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="hint">
+        {type === "nagara"
+          ? "そのラベルが続いていた時間帯です（例：YouTubeを流していた 20:00〜23:00）。途中でそれがメインになった時間は、イベントとして別に残せます。"
+          : "その場所にいた時間（例：カフェ、外出）"}
+      </p>
 
       <div className="time-block">
         <div className="time-row">
@@ -127,19 +152,35 @@ export default function SessionForm({ session, range, labelSuggestions, onSave, 
         </div>
         <div className="time-row">
           <span className="row-label">終了</span>
-          <input className="date-small" type="date" value={endDate} onChange={(e) => { if (e.target.value) { setEndDate(e.target.value); setEndDateTouched(true); } }} aria-label="終了日" />
-          <input className="time-input" type="time" value={endTime} onChange={(e) => onEndTimeChange(e.target.value)} aria-label="終了時刻" />
-          {isNextDay(startDate, endDate) && <span className="next-day">翌日</span>}
+          <div className="segmented" role="group" aria-label="終了の入れ方">
+            <button type="button" className={ongoing ? "on" : ""} aria-pressed={ongoing} onClick={() => setOngoing(true)}>継続中</button>
+            <button type="button" className={!ongoing ? "on" : ""} aria-pressed={!ongoing} onClick={() => setOngoing(false)}>時刻を指定</button>
+          </div>
         </div>
-        {!isNextDay(startDate, endDate) && endDate !== startDate && <p className="hint">終了は {formatShortDate(endDate)} です</p>}
+        {ongoing ? (
+          <p className="hint">終了は入れずに保存します。終わったら、画面上部の帯の「今で終了」を押します。勝手には終わりません。</p>
+        ) : (
+          <>
+            <div className="time-row">
+              <span className="row-label" />
+              <input className="date-small" type="date" value={endDate} onChange={(e) => { if (e.target.value) { setEndDate(e.target.value); setEndDateTouched(true); } }} aria-label="終了日" />
+              <input className="time-input" type="time" value={endTime} onChange={(e) => onEndTimeChange(e.target.value)} aria-label="終了時刻" />
+              {isNextDay(startDate, endDate) && <span className="next-day">翌日</span>}
+            </div>
+            {!isNextDay(startDate, endDate) && endDate !== startDate && <p className="hint">終了は {formatShortDate(endDate)} です</p>}
+          </>
+        )}
       </div>
 
-      {error && <p className="notice error" role="alert">{error}</p>}
+      {error && label.trim() !== "" && <p className="notice error" role="alert">{error}</p>}
       {saveError && <p className="notice error" role="alert">{saveError}</p>}
 
       <div className="sheet-actions">
         {editing && <button type="button" className="danger-btn" onClick={handleDelete} disabled={busy}>削除</button>}
         <span className="spacer" />
+        {editing && session.end === null && (
+          <button type="button" className="secondary-btn" onClick={handleEndNow} disabled={busy || label.trim() === ""}>今で終了</button>
+        )}
         <button type="button" className="primary-btn" onClick={handleSave} disabled={!!error || busy}>保存</button>
       </div>
     </>
