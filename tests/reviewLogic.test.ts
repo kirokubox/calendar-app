@@ -287,3 +287,21 @@ test("祝日の仕事は休日出勤。細分類なしの行は、同じ色に�
   const rows = buildDiffRows(s, computeReview([], [], shiftPeriod(week, -1), false), settings);
   assert.ok(rows.some((r) => r.name === "睡眠（細分類なし）" && r.depth === 1));
 });
+
+test("集計の行：同じ親カテゴリで細分類名が同じなら、色が違っても1行（共同垢の二重）", () => {
+  // 色9（発信・開発）と色2（友達）は、どちらも既定で自由時間
+  const events = [
+    ev("a", "編集", "2026-10-06T10:00", "2026-10-06T11:00", { colorId: "9", subcategory: "共同垢" }),
+    ev("b", "打合せ→撮影", "2026-10-06T13:00", "2026-10-06T15:00", { colorId: "2", subcategory: "共同垢" }),
+    ev("c", "記事", "2026-10-06T16:00", "2026-10-06T16:30", { colorId: "9", subcategory: "記録垢" }),
+  ];
+  const s = computeReview(events, [], WEEK);
+  const free = buildBreakdown(s, settings).parents.find((p) => p.name === "自由時間")!;
+  assert.deepEqual(free.children.map((c) => [c.name, c.minutes]), [["共同垢", 180], ["記録垢", 30]]);
+  // 同じグラフの中で色が重ならない
+  assert.notEqual(free.children[0].color, free.children[1].color);
+  const rows = buildDiffRows(s, computeReview([], [], WEEK), settings).filter((r) => r.depth === 1).map((r) => r.name);
+  assert.deepEqual(rows, ["共同垢", "記録垢"]);
+  const day = stackedBarSeries(s, { type: "parent", name: "自由時間" }, settings).find((d) => d.date === "2026-10-06")!;
+  assert.deepEqual(day.segments.map((x) => [x.label, x.minutes, x.color]), free.children.map((c) => [c.name, c.minutes, c.color]));
+});

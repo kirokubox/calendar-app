@@ -1,5 +1,5 @@
 // 予定と実績の純粋ロジック（リンク判定・未確定判定・予定通りの複製・変更履歴）。繰り返しは recurrence.ts。
-import { diffMinutes, timePart } from "./dateUtils.js";
+import { addMinutes, datePart, diffMinutes, localFromMinutes, roundTo, timePart, timeToMinutes } from "./dateUtils.js";
 import { clipToDay, layoutColumns, type DaySegment, type PlacedSegment } from "./layout.js";
 import { eventDefaults } from "./migrate.js";
 import type { CalendarEvent, Nagara, PlanRevision, PlanSnapshot } from "./types.js";
@@ -47,6 +47,18 @@ export function layoutDayWithPlans(events: CalendarEvent[], dayKey: string, link
     else back.push({ seg, variant });
   }
   return { front: layoutColumns(frontSegs), back };
+}
+
+/**
+ * 「この予定の続きを記録」の範囲。開始＝この予定から作った実績のうち最も遅い終了、終了＝現在を5分に丸めたもの
+ * （開始以下なら開始+60分）。残業・予定より長引いた時間を、同じ予定にひもづけたまま足すため。
+ */
+export function continueRange(actuals: CalendarEvent[], plan: CalendarEvent, now: string): { start: string; end: string } {
+  let start = plan.start;
+  for (const a of actuals) if (!a.allDay && a.end > start) start = a.end;
+  let end = localFromMinutes(datePart(now), roundTo(timeToMinutes(timePart(now)), 5));
+  if (end <= start) end = addMinutes(start, 60);
+  return { start, end };
 }
 
 /** 「予定通り」：予定と同じ内容の実績（planId付き）と、ながらの複製（時間つきも同じ時間で）を作る */

@@ -62,12 +62,17 @@ export function allDayEventsOn(events: CalendarEvent[], dayKey: string): Calenda
   return events.filter((e) => e.allDay && datePart(e.start) <= dayKey && dayKey < datePart(e.end));
 }
 
-/** 短いイベントでも重なり判定が見た目と合うよう、最低でもこの分数ぶんは場所を取るとみなす */
-export const MIN_LAYOUT_MINUTES = 20;
+/**
+ * 重なり判定の許容幅（分）。前の記録の終わりと次の記録の始まりが、この分数までしか重ならなければ
+ * 重なりとみなさない（6:31終わりと6:30始まりのような入力のずれで、長い睡眠まで半分の幅にならないように）
+ */
+export const OVERLAP_TOLERANCE_MINUTES = 5;
 
 /**
  * 重なりのクラスタごとに列数を決める標準的な列分割。
  * クラスタ＝推移的に重なり合うイベントの塊。クラスタ内で最小の空き列へ貼り、列数はクラスタ内の最大列数。
+ * 判定は実際の時刻で行う。短いイベントは見た目の高さが実際より長くなるが、そのぶんは後のイベントが上に重なって描かれる
+ * （以前は最低20分ぶんの場所を取るとみなしていたため、15分のイベントの直後が半分の幅になっていた）。
  */
 export function layoutColumns<T extends { startMin: number; endMin: number }>(segments: T[]): Array<Placed<T>> {
   const sorted = [...segments].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
@@ -86,7 +91,8 @@ export function layoutColumns<T extends { startMin: number; endMin: number }>(se
   };
 
   for (const seg of sorted) {
-    const effEnd = Math.max(seg.endMin, seg.startMin + MIN_LAYOUT_MINUTES);
+    // 許容幅ぶん終わりを手前に寄せて判定する。ただし長さ0にはしない
+    const effEnd = Math.max(seg.endMin - OVERLAP_TOLERANCE_MINUTES, seg.startMin + 1);
     if (cluster.length > 0 && seg.startMin >= clusterEnd) flush();
     let col = colEnds.findIndex((end) => end <= seg.startMin);
     if (col === -1) {

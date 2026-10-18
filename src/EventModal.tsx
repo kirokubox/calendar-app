@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { COLOR_HEX, COLOR_IDS, FIXED_NAGARA, FIXED_PLACES } from "./constants";
 import { addDays, datePart, formatShortDate, joinLocal, timePart, toLocal, weekdayName } from "./dateUtils";
 import {
-  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, peopleSuggestions, placeSuggestions, shiftEnd,
+  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, peopleSuggestions, placeSuggestions, shiftEnd, startDateKeepingEnd,
   subcategorySuggestions, titleSuggestions, validateEvent, type Range,
 } from "./eventLogic";
 import { holidayName } from "./holidays";
@@ -30,6 +30,8 @@ interface Props {
   initialTab: ModalTab;
   /** 新規のセッションを、終了を入れない「継続中」から始めるか */
   sessionOngoing?: boolean;
+  /** ＋ボタン（今日）から：終了＝押した時刻なので、開始を変えても終了を動かさない */
+  keepEnd?: boolean;
   /** 予定から「実績を入力」で開いたときの元の予定（内容の初期値とリンク先） */
   template: CalendarEvent | null;
   /** 編集中の予定の変更履歴（新しい順） */
@@ -85,7 +87,7 @@ function sortedLabels(drafts: NagaraDraft[]): string {
 }
 
 export default function EventModal({
-  mode, event, session, range, initialTab, sessionOngoing, template, revisions, linkedActualCount, planOfActual, rule, occurrenceRule, events, nagara, settings, now,
+  mode, event, session, range, initialTab, sessionOngoing, keepEnd = false, template, revisions, linkedActualCount, planOfActual, rule, occurrenceRule, events, nagara, settings, now,
   onSave, onSaveRule, onDelete, onAsPlanned, onCancelPlan, onUncancelPlan, onRecordActual, onSaveSession, onDeleteSession, onClose,
 }: Props) {
   const isRule = mode === "rule" && rule != null;
@@ -105,8 +107,9 @@ export default function EventModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [drafts, setDrafts] = useState<NagaraDraft[]>(initialDrafts);
-  const initStart = src?.start ?? range?.start ?? now;
-  const initEnd = src?.end ?? range?.end ?? now;
+  // 時刻は、編集なら元のイベント、新規なら渡された範囲（予定の続きは「前の実績の終わり〜今」）を優先する
+  const initStart = event?.start ?? range?.start ?? template?.start ?? now;
+  const initEnd = event?.end ?? range?.end ?? template?.end ?? now;
   const initAllDay = src?.allDay ?? false;
 
   const [title, setTitle] = useState(isRule ? rule.title : src?.title ?? "");
@@ -177,6 +180,10 @@ export default function EventModal({
 
   const onStartDateChange = (value: string) => {
     if (!value) return;
+    if (keepEnd && !allDay) {
+      setStartDate(value);
+      return;
+    }
     if (allDay) {
       const delta = Math.round((new Date(`${value}T00:00:00`).getTime() - new Date(`${startDate}T00:00:00`).getTime()) / 86400000);
       setStartDate(value);
@@ -193,6 +200,12 @@ export default function EventModal({
     if (!value) return;
     if (isRule) {
       setStartTime(value);
+      return;
+    }
+    // ＋ボタンから：終了（押した時刻）はそのまま、開始だけ動かす
+    if (keepEnd) {
+      setStartTime(value);
+      setStartDate(startDateKeepingEnd(startDate, value, joinLocal(endDate, endTime)));
       return;
     }
     const newEnd = shiftEnd(joinLocal(startDate, startTime), joinLocal(startDate, value), joinLocal(endDate, endTime));

@@ -18,6 +18,8 @@ interface Props {
   sessionLabels: string[];
   settings: Settings;
   onEdit: () => void;
+  /** もとの予定にひもづけたまま、続き（残業・長引いた時間）の実績を作る */
+  onContinuePlan: () => void;
   onClose: () => void;
 }
 
@@ -37,7 +39,7 @@ function whenLabel(e: CalendarEvent): string {
 }
 
 /** 実績・種別不明のイベントを読むだけの画面。編集は「編集」を押してから */
-export default function EventViewer({ event, plan, siblings, nagaraLabels, sessionLabels, settings, onEdit, onClose }: Props) {
+export default function EventViewer({ event, plan, siblings, nagaraLabels, sessionLabels, settings, onEdit, onContinuePlan, onClose }: Props) {
   const backdrop = useBackdropClose(onClose);
 
   useEffect(() => {
@@ -108,6 +110,9 @@ export default function EventViewer({ event, plan, siblings, nagaraLabels, sessi
               <p className="hint">この予定から作った実績は {siblings.count} 件、合わせて {formatDuration(siblings.minutes)}（予定は {formatDuration(diff.planMinutes)}）。</p>
             )}
             {plan.status === "cancelled" && <p className="hint">この予定はキャンセル済みです{plan.cancelReason ? `（理由：${plan.cancelReason}）` : ""}。</p>}
+            {plan.status !== "cancelled" && !plan.allDay && !event.allDay && (
+              <button type="button" className="secondary-btn" onClick={onContinuePlan}>この予定の続きを記録</button>
+            )}
           </div>
         )}
 

@@ -21,6 +21,18 @@ export function shiftEnd(oldStart: string, newStart: string, oldEnd: string): st
   return addMinutes(oldEnd, diffMinutes(oldStart, newStart));
 }
 
+/**
+ * ＋ボタンから作るとき（終了＝押した時刻で固定）に開始時刻だけを変えたときの開始日。
+ * 終了の日かその前日なら、終了より前で最も近い日を選ぶ（0:30に「23:40から」と直すと前日の23:40になる）。
+ * それより前の日を自分で選んでいるときは、その日のまま。
+ */
+export function startDateKeepingEnd(startDate: string, newStartTime: string, end: string): string {
+  const endDate = datePart(end);
+  const dayBefore = addDays(endDate, -1);
+  if (startDate !== endDate && startDate !== dayBefore) return startDate;
+  return joinLocal(endDate, newStartTime) < end ? endDate : dayBefore;
+}
+
 /** 新規時の種別の自動判定：開始が現在より未来なら予定、それ以外は実績 */
 export function autoKind(start: string, now: string): EventKind {
   return start > now ? "plan" : "actual";
@@ -86,20 +98,27 @@ export function rangeFromTap(dayKey: string, minutesFromMidnight: number): Range
   return { start, end: addMinutes(start, 60) };
 }
 
+/** ＋ボタンで、前日に終わった記録を開始に使う範囲（分） */
+const PLUS_LOOKBACK_MINUTES = 8 * 60;
+
 /**
  * ＋ボタンの新規作成範囲。
- * 今日：開始＝今日の（終日でない）イベントのうち終了が現在以前で最も遅いもの（無ければ現在を15分切り捨て）、
+ * 今日：開始＝今日（日付が変わった直後は、前日のうち現在から8時間以内）に終わった（終日でない）イベントのうち
+ * 終了が現在以前で最も遅いもの（無ければ現在を15分切り捨て）、
  * 終了＝現在を5分に丸めたもの（開始以下なら開始+60分）。今日以外は12:00〜13:00。
  */
 export function rangeForPlusButton(events: CalendarEvent[], dayKey: string, now: string): Range {
   if (dayKey !== datePart(now)) {
     return { start: joinLocal(dayKey, "12:00"), end: joinLocal(dayKey, "13:00") };
   }
+  // 日付が変わった直後でも前の記録の続きから始められるよう、前日に終わった記録も、現在から8時間以内なら見る
   const dayStart = joinLocal(dayKey, "00:00");
+  const recent = addMinutes(now, -PLUS_LOOKBACK_MINUTES);
+  const lookFrom = recent < dayStart ? recent : dayStart;
   let latest: string | null = null;
   for (const e of events) {
     if (e.allDay) continue;
-    if (e.end > dayStart && e.end <= now && (latest === null || e.end > latest)) latest = e.end;
+    if (e.end > lookFrom && e.end <= now && (latest === null || e.end > latest)) latest = e.end;
   }
   const nowMin = timeToMinutes(timePart(now));
   const start = latest ?? localFromMinutes(dayKey, floorTo(nowMin, 15));

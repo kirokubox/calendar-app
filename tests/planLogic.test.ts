@@ -3,7 +3,7 @@ import test from "node:test";
 import { monthCellItems } from "../src/eventLogic.js";
 import { eventDefaults } from "../src/migrate.js";
 import {
-  applyCancel, applyUncancel, buildAsPlanned, buildRevision, diffSnapshots, isLinkedPlan, isUnconfirmed,
+  applyCancel, applyUncancel, buildAsPlanned, buildRevision, continueRange, diffSnapshots, isLinkedPlan, isUnconfirmed,
   layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, revisionsOfPlan, shouldRecordRevision, snapshotOf, unlinkActuals,
 } from "../src/planLogic.js";
 import type { CalendarEvent, Nagara } from "../src/types.js";
@@ -137,4 +137,13 @@ test("キャンセルと取り消し・履歴の取り出し・削除時のリ�
   assert.deepEqual(unlinked.map((e) => [e.id, e.planId]), [["a1", null]]);
   assert.equal(planLabel(plan), "会議 10:00–11:00");
   assert.equal(planLabel(ev("p", "旅行", "2026-10-08T00:00", "2026-10-09T00:00", { allDay: true })), "旅行 終日");
+});
+
+test("この予定の続きを記録：開始＝この予定から作った実績の最も遅い終了、終了＝現在（5分丸め）", () => {
+  const plan = { ...eventDefaults(), id: "p", title: "仕事", start: "2026-10-14T12:45", end: "2026-10-14T17:30", allDay: false, colorId: "11", kind: "plan" as const, createdAt: "x", updatedAt: "x" };
+  const a1 = { ...plan, id: "a1", kind: "actual" as const, planId: "p", start: "2026-10-14T12:45", end: "2026-10-14T15:15" };
+  const a2 = { ...plan, id: "a2", kind: "actual" as const, planId: "p", start: "2026-10-14T15:15", end: "2026-10-14T17:30" };
+  assert.deepEqual(continueRange([a1, a2], plan, "2026-10-14T18:42"), { start: "2026-10-14T17:30", end: "2026-10-14T18:40" });
+  // 現在が開始より前なら開始+60分
+  assert.deepEqual(continueRange([a1, a2], plan, "2026-10-14T17:20"), { start: "2026-10-14T17:30", end: "2026-10-14T18:30" });
 });

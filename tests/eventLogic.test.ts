@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, rangeForPlusButton, rangeFromTap, shiftEnd,
+  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, rangeForPlusButton, rangeFromTap, shiftEnd, startDateKeepingEnd,
   titleSuggestions, validateEvent,
 } from "../src/eventLogic.js";
 import { eventDefaults } from "../src/migrate.js";
@@ -87,6 +87,19 @@ test("＋ボタン（今日）：直前の終了時刻を開始にし、終了�
 test("＋ボタン（今日）：昨日で終わった記録は開始に使わない／無ければ現在を15分切り捨て", () => {
   const events = [ev("a", "昨日", "2026-10-07T20:00", "2026-10-07T22:00")];
   assert.deepEqual(rangeForPlusButton(events, "2026-10-08", "2026-10-08T09:33"), { start: "2026-10-08T09:30", end: "2026-10-08T09:35" });
+});
+
+test("＋ボタン（日付が変わった直後）：前日の夜に終わった記録の続きから始める", () => {
+  const events = [ev("a", "アニメ", "2026-10-07T22:30", "2026-10-07T23:10")];
+  assert.deepEqual(rangeForPlusButton(events, "2026-10-08", "2026-10-08T00:42"), { start: "2026-10-07T23:10", end: "2026-10-08T00:40" });
+});
+
+test("＋から作るとき開始だけ変える：終了以降になる時刻は前日とみなす", () => {
+  assert.equal(startDateKeepingEnd("2026-10-08", "00:10", "2026-10-08T00:40"), "2026-10-08");
+  assert.equal(startDateKeepingEnd("2026-10-08", "23:40", "2026-10-08T00:40"), "2026-10-07");
+  assert.equal(startDateKeepingEnd("2026-10-07", "23:50", "2026-10-08T00:40"), "2026-10-07");
+  assert.equal(startDateKeepingEnd("2026-10-07", "00:10", "2026-10-08T00:40"), "2026-10-08");
+  assert.equal(startDateKeepingEnd("2026-10-05", "10:00", "2026-10-08T00:40"), "2026-10-05");
 });
 
 test("＋ボタン（今日）：終了が開始以下になるなら開始+60分", () => {

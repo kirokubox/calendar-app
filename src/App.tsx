@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { COLOR_KEYS, FIXED_MARKERS, FIXED_NAGARA, FOUR_DAY_HOUR_HEIGHT, HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
 import {
-  addDays, addMinutes, addMonths, dateKeyOf, diffMinutes, formatDayLabel, formatMonthLabel, formatRangeLabel, formatWeekRangeLabel, fourDayKeys,
+  addDays, addMinutes, addMonths, dateKeyOf, diffMinutes, formatDayLabel, formatMonthLabel, formatRangeLabel, formatShortDate, formatWeekRangeLabel, fourDayKeys,
   startOfMonth, startOfWeek, timePart, toLocal, weekDayKeys, weekendClass,
 } from "./dateUtils";
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
@@ -9,6 +9,7 @@ import { allDayEventsOn } from "./layout";
 import { markerCandidates, markersForDay } from "./markerLogic";
 import { eventDefaults } from "./migrate";
 import {
+  continueRange,
   applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, revisionsOfPlan,
   shouldRecordRevision, unlinkActuals,
 } from "./planLogic";
@@ -45,7 +46,7 @@ import type { ActiveSleep, BackupFile, CalendarEvent, ColorId, Marker, Nagara, P
 
 type ViewMode = "day" | "fourDay" | "week" | "month";
 type ModalState =
-  | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent; ongoing?: boolean }
+  | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent; ongoing?: boolean; keepEnd?: boolean }
   | { mode: "edit"; event: CalendarEvent }
   | { mode: "view"; event: CalendarEvent }
   | { mode: "session"; session: Nagara }
@@ -152,6 +153,15 @@ export default function App() {
     };
   }, []);
 
+  // 開いたまま日付が変わったら、今日を見ていた場合だけ新しい今日へ移る（＋が前日の12:00で開かないように）
+  const prevTodayRef = useRef(todayKey);
+  useEffect(() => {
+    const prev = prevTodayRef.current;
+    if (prev === todayKey) return;
+    prevTodayRef.current = todayKey;
+    setDayKey((k) => (k === prev ? todayKey : k));
+  }, [todayKey]);
+
   // 保存後の「取り消す・時刻を直す」は、しばらくしたら自動で消す
   useEffect(() => {
     if (!toast) return;
@@ -201,13 +211,14 @@ export default function App() {
     return [...new Set([...FIXED_NAGARA, ...recent])].filter((l) => !busy.has(l));
   }, [nagara, running]);
 
-  const openNew = useCallback((range: Range, tab: ModalTab = "event", ongoing = false) => setModal({ mode: "new", range, tab, ongoing }), []);
+  const openNew = useCallback((range: Range, tab: ModalTab = "event", ongoing = false, keepEnd = false) => setModal({ mode: "new", range, tab, ongoing, keepEnd }), []);
 
   /** 実績・種別不明はまず閲覧モード、予定は従来どおり操作つきの編集シート */
   const openEvent = useCallback((e: CalendarEvent) => setModal(e.kind === "plan" ? { mode: "edit", event: e } : { mode: "view", event: e }), []);
 
-  // ＋ボタン：今日を見ているときにセッションへ切り替えたら、終了を入れない「継続中」から始める
-  const onPlus = () => openNew(rangeForPlusButton(events, dayKey, toLocal(new Date())), "event", dayKey === todayKey);
+  // ＋ボタン：今日を見ているときにセッションへ切り替えたら、終了を入れない「継続中」から始める。
+  // 今日の＋は終了＝押した時刻なので、開始を直しても終了は動かさない
+  const onPlus = () => openNew(rangeForPlusButton(events, dayKey, toLocal(new Date())), "event", dayKey === todayKey, dayKey === todayKey);
 
   const minutesAt = (ev: React.MouseEvent<HTMLDivElement>, el: HTMLDivElement | null) => {
     const rect = el?.getBoundingClientRect();
@@ -552,6 +563,9 @@ export default function App() {
         sessionLabels={e.allDay ? [] : sessionLabelsOverlapping(nagara, e.start, e.end, nowLocal).filter((l) => !attached.includes(l))}
         settings={settings}
         onEdit={() => setModal({ mode: "edit", event: e })}
+        onContinuePlan={() => {
+          if (plan) setModal({ mode: "new", range: continueRange(sameplan, plan, toLocal(new Date())), tab: "event", template: plan, keepEnd: true });
+        }}
         onClose={closeModal}
       />
     );
@@ -580,6 +594,7 @@ export default function App() {
         range={modal.mode === "new" ? modal.range : null}
         initialTab={modal.mode === "new" ? modal.tab : "event"}
         sessionOngoing={modal.mode === "new" ? modal.ongoing ?? false : false}
+        keepEnd={modal.mode === "new" ? modal.keepEnd ?? false : false}
         template={modal.mode === "new" ? modal.template ?? null : null}
         revisions={modal.mode === "edit" ? revisionsOfPlan(revisions, modal.event.id) : []}
         linkedActualCount={modal.mode === "edit" ? events.filter((e) => e.planId === modal.event.id).length : 0}
@@ -680,10 +695,15 @@ export default function App() {
 
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const dayHoliday = viewMode === "day" ? holidayName(dayKey) : null;
+  // 4日・週はスマホ幅で終わりの日付が切れるので、始まりの日だけを出す（全体は title に残す）
+  const fullRangeLabel =
+    viewMode === "fourDay" ? formatRangeLabel(fourKeys[0], fourKeys[3])
+    : viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay)
+    : null;
   const headLabel =
     viewMode === "day" ? formatDayLabel(dayKey)
-    : viewMode === "fourDay" ? formatRangeLabel(fourKeys[0], fourKeys[3])
-    : viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay)
+    : viewMode === "fourDay" ? `${formatShortDate(fourKeys[0])}〜`
+    : viewMode === "week" ? `${formatShortDate(startOfWeek(dayKey, weekStartDay))}〜`
     : formatMonthLabel(dayKey);
   const stepName = viewMode === "fourDay" ? "4日間" : VIEW_LABEL[viewMode];
   const multiDay = viewMode === "week" || viewMode === "fourDay";
@@ -694,7 +714,7 @@ export default function App() {
         <div className="topbar-row">
           <button type="button" className="icon-btn" aria-label={`前の${stepName}`} onClick={() => step(-1)}><Icon name="chevron-left" /></button>
           <label className="date-jump" title="日付を選ぶ">
-            <span className={`date-label ${multiDay ? "small" : ""} ${viewMode === "day" ? weekendClass(dayKey) : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
+            <span title={fullRangeLabel ?? undefined} className={`date-label ${multiDay ? "small" : ""} ${viewMode === "day" ? weekendClass(dayKey) : ""} ${dayHoliday ? "holiday" : ""}`}>{headLabel}{dayHoliday && <small className="date-holiday">{dayHoliday}</small>}</span>
             <input
               type="date"
               value={dayKey}
