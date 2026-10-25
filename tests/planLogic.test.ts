@@ -4,7 +4,7 @@ import { monthCellItems } from "../src/eventLogic.js";
 import { eventDefaults } from "../src/migrate.js";
 import {
   applyCancel, applyUncancel, buildAsPlanned, buildRevision, continueRange, diffSnapshots, isLinkedPlan, isUnconfirmed,
-  layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, revisionsOfPlan, shouldRecordRevision, snapshotOf, unlinkActuals,
+  layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, remainingPlanRanges, revisionsOfPlan, shouldRecordRevision, snapshotOf, unlinkActuals,
 } from "../src/planLogic.js";
 import type { CalendarEvent, Nagara } from "../src/types.js";
 
@@ -48,7 +48,7 @@ test("未確定判定：過ぎた・有効・リンクなしの予定だけ", ()
   assert.equal(isUnconfirmed(ev("a", "x", "2026-10-08T10:00", "2026-10-08T11:00", { kind: "actual" }), none, now), false, "実績");
 });
 
-test("日の切り分け：リンク済み・キャンセルは列分割に参加せず背面", () => {
+test("日の切り分け：実績で埋まった予定は消え、キャンセルだけ背面", () => {
   const events = [
     ev("p1", "会議", "2026-10-08T10:00", "2026-10-08T11:00"),
     ev("a1", "会議", "2026-10-08T10:00", "2026-10-08T11:00", { kind: "actual", planId: "p1" }),
@@ -58,7 +58,33 @@ test("日の切り分け：リンク済み・キャンセルは列分割に参�
   const { front, back } = layoutDayWithPlans(events, "2026-10-08", linkedPlanIds(events));
   assert.deepEqual(front.map((s) => s.event.id).sort(), ["a1", "n1"]);
   assert.equal(front[0].cols, 2, "前面の2件だけで2列");
-  assert.deepEqual(back.map((b) => [b.seg.event.id, b.variant]).sort(), [["c1", "cancelled"], ["p1", "linked"]]);
+  assert.deepEqual(back.map((b) => [b.seg.event.id, b.variant]), [["c1", "cancelled"]]);
+});
+
+test("予定の未消化範囲：実績化した部分だけを引き、残りを時刻順に返す", () => {
+  const plan = ev("p1", "午後有休", "2026-10-08T13:00", "2026-10-08T17:30");
+  const events = [
+    plan,
+    ev("a1", "昼食", "2026-10-08T13:00", "2026-10-08T14:00", { kind: "actual", planId: "p1" }),
+    ev("a2", "散歩", "2026-10-08T15:00", "2026-10-08T16:30", { kind: "actual", planId: "p1" }),
+  ];
+  assert.deepEqual(remainingPlanRanges(plan, events), [
+    { start: "2026-10-08T14:00", end: "2026-10-08T15:00" },
+    { start: "2026-10-08T16:30", end: "2026-10-08T17:30" },
+  ]);
+  const { front, back } = layoutDayWithPlans(events, "2026-10-08", linkedPlanIds(events));
+  const remains = front.filter((segment) => segment.event.id === "p1");
+  assert.deepEqual(remains.map((segment) => [segment.startMin, segment.endMin]), [[840, 900], [990, 1050]]);
+  assert.equal(back.length, 0);
+});
+
+test("予定の未消化範囲：予定通りの実績と終日予定は消化済みになる", () => {
+  const timed = ev("p1", "会議", "2026-10-08T10:00", "2026-10-08T11:00");
+  const actual = ev("a1", "会議", "2026-10-08T10:00", "2026-10-08T11:00", { kind: "actual", planId: "p1" });
+  assert.deepEqual(remainingPlanRanges(timed, [timed, actual]), []);
+  const allDay = ev("p2", "デート", "2026-10-08T00:00", "2026-10-09T00:00", { allDay: true });
+  const allDayActual = ev("a2", "映画", "2026-10-08T14:00", "2026-10-08T16:00", { kind: "actual", planId: "p2" });
+  assert.deepEqual(remainingPlanRanges(allDay, [allDay, allDayActual]), []);
 });
 
 test("月表示：リンク済みの予定とキャンセルは出さない", () => {
@@ -70,6 +96,15 @@ test("月表示：リンク済みの予定とキャンセルは出さない", ()
   ];
   const cell = monthCellItems(events, "2026-10-08", 3, linkedPlanIds(events));
   assert.deepEqual(cell.shown.map((e) => e.id), ["a1", "p2"]);
+});
+
+test("月表示：一部だけ実績化した予定は残りがあるため表示する", () => {
+  const events = [
+    ev("p1", "午後有休", "2026-10-08T13:00", "2026-10-08T17:30"),
+    ev("a1", "散歩", "2026-10-08T13:00", "2026-10-08T14:00", { kind: "actual", planId: "p1" }),
+  ];
+  const cell = monthCellItems(events, "2026-10-08", 3, linkedPlanIds(events));
+  assert.deepEqual(cell.shown.map((e) => e.id).sort(), ["a1", "p1"]);
 });
 
 test("予定通り：同内容の実績をplanId付きで作り、ながらも複製する", () => {

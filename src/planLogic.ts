@@ -1,6 +1,6 @@
 // 予定と実績の純粋ロジック（リンク判定・未確定判定・予定通りの複製・変更履歴）。繰り返しは recurrence.ts。
 import { addMinutes, datePart, diffMinutes, localFromMinutes, roundTo, timePart, timeToMinutes } from "./dateUtils.js";
-import { clipToDay, layoutColumns, type DaySegment, type PlacedSegment } from "./layout.js";
+import { clipRangeToDay, clipToDay, layoutColumns, type DaySegment, type PlacedSegment } from "./layout.js";
 import { eventDefaults } from "./migrate.js";
 import type { CalendarEvent, Nagara, PlanRevision, PlanSnapshot } from "./types.js";
 
@@ -30,16 +30,57 @@ export function planVariant(event: CalendarEvent, linked: Set<string>): PlanVari
   return linked.has(event.id) ? "linked" : "normal";
 }
 
+export interface PlanRange {
+  start: string;
+  end: string;
+}
+
+/**
+ * 元予定から、その予定にひも付いた実績の時間を差し引いた未消化範囲。
+ * 元予定のデータは変えず、カレンダー表示と次の実績入力の初期範囲にだけ使う。
+ */
+export function remainingPlanRanges(plan: CalendarEvent, events: CalendarEvent[]): PlanRange[] {
+  const actuals = events
+    .filter((event) => event.planId === plan.id)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  if (actuals.length === 0) return [{ start: plan.start, end: plan.end }];
+  // 終日予定には「何時から何時まで残り」という概念がないため、実績ができたら表示上は消化済み。
+  if (plan.allDay) return [];
+
+  let ranges: PlanRange[] = [{ start: plan.start, end: plan.end }];
+  for (const actual of actuals) {
+    if (actual.allDay) return [];
+    const next: PlanRange[] = [];
+    for (const range of ranges) {
+      if (actual.end <= range.start || actual.start >= range.end) {
+        next.push(range);
+        continue;
+      }
+      if (actual.start > range.start) next.push({ start: range.start, end: actual.start < range.end ? actual.start : range.end });
+      if (actual.end < range.end) next.push({ start: actual.end > range.start ? actual.end : range.start, end: range.end });
+    }
+    ranges = next.filter((range) => range.start < range.end);
+  }
+  return ranges;
+}
+
 export interface PlacedBackground {
   seg: DaySegment;
   variant: PlanVariant;
 }
 
-/** その日の表示用の切り分け：通常のイベントだけを列分割し、リンク済み・キャンセルの予定は背面用に分ける */
+/** その日の表示用の切り分け：実績化した予定は未消化範囲だけを出し、キャンセル予定は背面へ分ける */
 export function layoutDayWithPlans(events: CalendarEvent[], dayKey: string, linked: Set<string>): { front: PlacedSegment[]; back: PlacedBackground[] } {
   const frontSegs: DaySegment[] = [];
   const back: PlacedBackground[] = [];
   for (const e of events) {
+    if (e.kind === "plan" && e.status !== "cancelled" && linked.has(e.id)) {
+      for (const range of remainingPlanRanges(e, events)) {
+        const clipped = clipRangeToDay(range.start, range.end, dayKey);
+        if (clipped) frontSegs.push({ event: e, ...clipped, displayStart: range.start, displayEnd: range.end });
+      }
+      continue;
+    }
     const seg = clipToDay(e, dayKey);
     if (!seg) continue;
     const variant = planVariant(e, linked);

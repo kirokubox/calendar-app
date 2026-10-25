@@ -3,6 +3,9 @@ import type { CalendarEvent } from "./types.js";
 
 export interface DaySegment {
   event: CalendarEvent;
+  /** 元イベントの一部だけを表示するときの表示上の開始・終了 */
+  displayStart?: string;
+  displayEnd?: string;
   /** その日の0:00からの分 */
   startMin: number;
   endMin: number;

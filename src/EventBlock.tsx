@@ -54,7 +54,9 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day",
   const metrics = METRICS[density];
   const top = (seg.startMin / 60) * hourHeight;
   const height = Math.max(((seg.endMin - seg.startMin) / 60) * hourHeight - 1, metrics.line + metrics.chrome);
-  const timeLabel = `${timePart(e.start)}${dayTag(e.start, dayKey)}–${timePart(e.end)}${dayTag(e.end, dayKey)}`;
+  const shownStart = seg.displayStart ?? e.start;
+  const shownEnd = seg.displayEnd ?? e.end;
+  const timeLabel = `${timePart(shownStart)}${dayTag(shownStart, dayKey)}–${timePart(shownEnd)}${dayTag(shownEnd, dayKey)}`;
   const people = e.people.map((p) => p.trim()).filter((p) => p !== "");
   const places = e.places.map((p) => p.trim()).filter((p) => p !== "");
   const plus = nagaraLabels.map((l) => `＋${l}`).join(" ");

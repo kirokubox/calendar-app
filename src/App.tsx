@@ -10,7 +10,7 @@ import { markerCandidates, markersForDay } from "./markerLogic";
 import { eventDefaults } from "./migrate";
 import {
   continueRange,
-  applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, revisionsOfPlan,
+  applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, remainingPlanRanges, revisionsOfPlan,
   shouldRecordRevision, unlinkActuals,
 } from "./planLogic";
 import {
@@ -199,7 +199,10 @@ export default function App() {
 
   const linked = useMemo(() => linkedPlanIds(events), [events]);
   const dayLayout = useMemo(() => layoutDayWithPlans(events, dayKey, linked), [events, dayKey, linked]);
-  const allDayEvents = useMemo(() => allDayEventsOn(events, dayKey), [events, dayKey]);
+  const allDayEvents = useMemo(
+    () => allDayEventsOn(events, dayKey).filter((event) => !(event.kind === "plan" && linked.has(event.id))),
+    [events, dayKey, linked],
+  );
   const sessionSegs = useMemo(() => layoutSessions(sessionSegmentsForDay(nagara, dayKey, nowLocal)), [nagara, dayKey, nowLocal]);
   const dayMarkers = useMemo(() => markersForDay(markers, dayKey), [markers, dayKey]);
   const labelsByEvent = useMemo(() => nagaraLabelMap(nagara), [nagara]);
@@ -608,7 +611,10 @@ export default function App() {
         onAsPlanned={handleAsPlanned}
         onCancelPlan={handleCancelPlan}
         onUncancelPlan={handleUncancelPlan}
-        onRecordActual={(plan) => setModal({ mode: "new", range: { start: plan.start, end: plan.end }, tab: "event", template: plan })}
+        onRecordActual={(plan) => {
+          const remaining = remainingPlanRanges(plan, events)[0] ?? { start: plan.start, end: plan.end };
+          setModal({ mode: "new", range: remaining, tab: "event", template: plan });
+        }}
         onSaveSession={handleSaveSession}
         onDeleteSession={handleDeleteSession}
         onClose={closeModal}
@@ -788,7 +794,7 @@ export default function App() {
               ))}
               {dayLayout.front.map((seg) => (
                 <EventBlock
-                  key={`${seg.event.id}-${dayKey}`}
+                  key={`${seg.event.id}-${dayKey}-${seg.startMin}-${seg.endMin}`}
                   seg={seg}
                   dayKey={dayKey}
                   unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}

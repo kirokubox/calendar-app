@@ -46,7 +46,7 @@ export default function WeekView({
     () => dayKeys.map((k) => ({
       key: k,
       layout: layoutDayWithPlans(events, k, linked),
-      allDay: allDayEventsOn(events, k),
+      allDay: allDayEventsOn(events, k).filter((event) => !(event.kind === "plan" && linked.has(event.id))),
       sessions: four ? layoutSessions(sessionSegmentsForDay(nagara, k, nowLocal)) : [],
       markers: markersForDay(markers, k),
     })),
@@ -118,7 +118,7 @@ export default function WeekView({
                   ))}
                   {c.layout.front.map((seg) => (
                     <EventBlock
-                      key={`${seg.event.id}-${c.key}`}
+                      key={`${seg.event.id}-${c.key}-${seg.startMin}-${seg.endMin}`}
                       seg={seg}
                       dayKey={c.key}
                       unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}
