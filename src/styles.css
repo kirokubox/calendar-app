@@ -522,4 +522,22 @@ button { cursor: pointer; }
 .search-when { font-size: var(--kb-fs-xs); color: var(--muted); }
 .search-title { display: flex; align-items: baseline; gap: 6px; font-weight: 700; word-break: break-all; }
 .search-meta { font-size: var(--kb-fs-xs); color: var(--kb-text-2); word-break: break-all; }
+/* 検索画面の「前回」の一覧（v0.6.0） */
+.last-panel { display: flex; flex-direction: column; gap: 6px; }
+.last-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.last-head h2 { margin: 0; font-size: 0.95rem; }
+.last-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.last-row { width: 100%; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--kb-radius-m); background: #fff; text-align: left; }
+.last-row:active { background: var(--kb-surface-2); }
+.last-name { flex: 1 1 auto; min-width: 0; font-weight: 700; word-break: break-all; }
+.last-when { flex: none; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.last-target { flex: 1 0 100%; font-size: var(--kb-fs-xs); color: var(--muted); }
+.last-row.none .last-when { color: var(--muted); }
+.last-row.over { border-color: #f0c36d; background: var(--kb-warning-soft); }
+.last-row.over .last-when, .last-row.over .last-target { color: var(--kb-warning); font-weight: 700; }
+.last-edit-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.last-edit-list li { display: flex; align-items: center; gap: 4px; }
+.last-edit-name { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); font: inherit; }
+.last-edit-target { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--kb-fs-s); color: var(--kb-text-2); }
+.last-edit-target input { width: 3.6em; padding: 8px 6px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); font: inherit; text-align: right; }
 .search-memo { font-size: var(--kb-fs-s); color: var(--kb-text-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; word-break: break-all; }

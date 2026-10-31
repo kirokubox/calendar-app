@@ -5,6 +5,7 @@ import { dateKeyOf, isDateKey, parseDateKey, timePart, toLocal, weekdayName } fr
 import AiMarkdownSettings from "./AiMarkdownSettings";
 import GoogleImportSettings from "./GoogleImportSettings";
 import { Icon } from "./Icon";
+import LastItemsSettings from "./LastItemsSettings";
 import RecurrenceSettings from "./RecurrenceSettings";
 import type { ActiveSleep, BackupFile, CalendarEvent, Marker, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
 
@@ -56,6 +57,8 @@ export default function SettingsView({
   const [restoreError, setRestoreError] = useState("");
   const [restoreMessage, setRestoreMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  /** 復元のたびに増やし、「前回の一覧」の編集中の内容を読み直す */
+  const [restoreCount, setRestoreCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const rows: Array<{ key: string; name: string }> = [
@@ -151,6 +154,7 @@ export default function SettingsView({
       await onRestore(pending.backup, pending.sourceVersion);
       setLabels({ ...pending.backup.settings.colorLabels });
       if (pending.sourceVersion === 2) setParents({ ...pending.backup.settings.categoryParents });
+      setRestoreCount((n) => n + 1);
       setRestoreMessage(`${pending.summary.count}件を読み込みました`);
       setPending(null);
     } catch (e) {
@@ -257,6 +261,8 @@ export default function SettingsView({
           </div>
         </section>
 
+        <LastItemsSettings key={restoreCount} settings={settings} onSaveSettings={onSaveSettings} />
+
         <RecurrenceSettings
           recurrences={recurrences}
           message={ruleMessage}
@@ -291,8 +297,8 @@ export default function SettingsView({
                 ・保存した日時 {displayDateTime(pending.backup.exportedAt)}
               </p>
               <p className="hint">
-                同じ予定・実績・ながら・マーカーは上書きされ、それ以外は追加されます。色とカテゴリ名の設定は上書きされます
-                {pending.sourceVersion === 1 ? "（古い形式のバックアップなので、週の始まりと親カテゴリは今の設定のままです）" : ""}。
+                同じ予定・実績・ながら・マーカーは上書きされ、それ以外は追加されます。色とカテゴリ名・前回の一覧の設定は上書きされます
+                {pending.sourceVersion === 1 ? "（古い形式のバックアップなので、週の始まり・親カテゴリ・前回の一覧は今の設定のままです）" : ""}。
               </p>
               <div className="inline-actions">
                 <button type="button" className="primary-btn" onClick={confirmRestore} disabled={busy}>この内容を読み込む</button>

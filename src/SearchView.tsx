@@ -3,6 +3,7 @@ import { COLOR_HEX } from "./constants";
 import { Icon } from "./Icon";
 import { datePart, formatShortDate, timePart } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
+import { buildLastRows, lastDateLabel } from "./lastLogic";
 import { categoryName, colorKeyOf, formatDuration } from "./reviewLogic";
 import {
   SEARCH_FIELD_LABEL, daysAgoLabel, searchAll, summarizeHits, type SearchField, type SearchHit, type SearchKindFilter, type SearchQuery,
@@ -19,6 +20,8 @@ interface Props {
   query: SearchQuery;
   onQuery: (q: SearchQuery) => void;
   onBack: () => void;
+  /** 「前回」の一覧の項目を設定画面で編集する */
+  onEditLastItems: () => void;
   onOpenEvent: (e: CalendarEvent) => void;
   onOpenSession: (n: Nagara) => void;
   onOpenMarker: (m: Marker) => void;
@@ -40,12 +43,17 @@ function whenOf(h: SearchHit): string {
 }
 
 /** 検索画面：タイトル・人・場所・ながら・カテゴリ・メモを横断し、新しい順のカードで出す。前回日と回数も出す */
-export default function SearchView({ events, nagara, markers, settings, nowLocal, query, onQuery, onBack, onOpenEvent, onOpenSession, onOpenMarker }: Props) {
+export default function SearchView({ events, nagara, markers, settings, nowLocal, query, onQuery, onBack, onEditLastItems, onOpenEvent, onOpenSession, onOpenMarker }: Props) {
   const [limit, setLimit] = useState(PAGE);
   const hits = useMemo(() => searchAll(events, nagara, markers, settings, query), [events, nagara, markers, settings, query]);
   const summary = useMemo(() => summarizeHits(hits, nowLocal), [hits, nowLocal]);
   const set = (patch: Partial<SearchQuery>) => { setLimit(PAGE); onQuery({ ...query, ...patch }); };
   const active = query.text.trim() !== "" || query.from !== "" || query.to !== "";
+  // 言葉も期間も空のときだけ計算する（項目ごとに全件を見るので、検索中は計算しない）
+  const lastRows = useMemo(
+    () => (active ? [] : buildLastRows(settings.lastItems, events, nagara, markers, settings, nowLocal)),
+    [active, events, nagara, markers, settings, nowLocal],
+  );
 
   return (
     <div className="review">
@@ -90,7 +98,36 @@ export default function SearchView({ events, nagara, markers, settings, nowLocal
 
       <div className="settings-body review-body search-body">
         {!active ? (
-          <p className="hint">言葉を入れるか、期間を選ぶと探します。空白で区切ると、すべてを含むものに絞ります。ひらがな・カタカナ、全角・半角は区別しません。</p>
+          <>
+            <section className="last-panel" aria-label="前回の一覧">
+              <div className="last-head">
+                <h2>前回</h2>
+                <button type="button" className="text-btn small" onClick={onEditLastItems}>項目を編集</button>
+              </div>
+              {lastRows.length === 0 ? (
+                <p className="hint">設定の「前回の一覧」に行動（例：サウナ、散歩、美容院）を登録すると、ここに前回から何日かが久しぶりな順に並びます。</p>
+              ) : (
+                <ul className="last-list">
+                  {lastRows.map((r) => (
+                    <li key={r.item.id}>
+                      <button
+                        type="button"
+                        className={`last-row ${r.over ? "over" : ""} ${r.last === null ? "none" : ""}`}
+                        onClick={() => set({ text: r.item.name, field: "all", from: "", to: "" })}
+                      >
+                        <span className="last-name">{r.item.name}</span>
+                        <span className="last-when">
+                          {r.last ? `${daysAgoLabel(r.last.daysAgo)}（${lastDateLabel(datePart(r.last.start), nowLocal)}）` : "まだ記録がありません"}
+                        </span>
+                        {r.item.targetDays !== null && <span className="last-target">目安 {r.item.targetDays}日{r.over ? "を超えています" : ""}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <p className="hint">言葉を入れるか、期間を選ぶと探します。空白で区切ると、すべてを含むものに絞ります。ひらがな・カタカナ、全角・半角は区別しません。</p>
+          </>
         ) : (
           <>
             <div className="search-summary" role="status">

@@ -1,6 +1,6 @@
 // schemaVersion 1 → 2 の移行。IndexedDBの読み込み・バックアップの復元の両方で使う純粋ロジック。
 import { COLOR_KEYS, PARENT_CATEGORIES, defaultCategoryParents, defaultSettings } from "./constants.js";
-import type { CalendarEvent, ParentCategory, Settings } from "./types.js";
+import type { CalendarEvent, LastItem, ParentCategory, Settings } from "./types.js";
 
 type Rec = Record<string, unknown>;
 
@@ -77,5 +77,25 @@ export function migrateSettings(raw: unknown): Settings {
   }
   const startView =
     raw.startView === "day" || raw.startView === "fourDay" || raw.startView === "week" || raw.startView === "month" ? raw.startView : base.startView;
-  return { schemaVersion: 2, colorLabels, weekStartDay, categoryParents, startView };
+  return { schemaVersion: 2, colorLabels, weekStartDay, categoryParents, startView, lastItems: migrateLastItems(raw.lastItems) };
+}
+
+/** 目安の日数：1以上の整数だけ残す。それ以外は目安なし */
+export function normalizeTargetDays(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 9999 ? value : null;
+}
+
+/** 「前回」の一覧の項目。無ければ空。名前が空・idが重なるものは除く */
+export function migrateLastItems(raw: unknown): LastItem[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const items: LastItem[] = [];
+  for (const x of raw) {
+    if (!isRecord(x) || typeof x.id !== "string" || x.id === "" || typeof x.name !== "string") continue;
+    const name = x.name.trim();
+    if (name === "" || seen.has(x.id)) continue;
+    seen.add(x.id);
+    items.push({ id: x.id, name, targetDays: normalizeTargetDays(x.targetDays) });
+  }
+  return items;
 }

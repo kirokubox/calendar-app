@@ -662,6 +662,11 @@ export default function App() {
           query={searchQuery}
           onQuery={setSearchQuery}
           onBack={() => setView("calendar")}
+          onEditLastItems={() => {
+            setView("settings");
+            // 設定画面の描画後に「前回の一覧」の節まで送る
+            window.setTimeout(() => document.getElementById("last-items")?.scrollIntoView({ block: "start" }), 0);
+          }}
           onOpenEvent={openEvent}
           onOpenSession={(n) => setModal({ mode: "session", session: n })}
           onOpenMarker={(m) => setModal({ mode: "marker", marker: m })}

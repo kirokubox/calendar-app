@@ -137,6 +137,16 @@ export interface Settings {
   categoryParents: Record<string, ParentCategory>;
   /** 起動時の表示（既定は週） */
   startView: StartView;
+  /** 検索画面の「前回」の一覧に出す項目（v0.6.0〜。無い設定・バックアップは空として読む）。並びは登録した順 */
+  lastItems: LastItem[];
+}
+
+/** 「前回」の一覧の項目。名前で検索し、前回からの日数を出す */
+export interface LastItem {
+  id: string;
+  name: string;
+  /** 目安の日数（1以上の整数）。超えたら目立たせる。null は目安なし */
+  targetDays: number | null;
 }
 
 export interface BackupFile {

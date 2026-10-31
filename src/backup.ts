@@ -207,13 +207,22 @@ export function validateBackup(value: unknown): ValidationResult {
     if (typeof v !== "string") return { ok: false, reason: `settings.colorLabels の ${k} が文字列ではありません` };
     if (k === "default" || (COLOR_IDS as readonly string[]).includes(k)) colorLabels[k] = v;
   }
+  // 「前回」の一覧の項目は v0.6.0 で追加。無いバックアップは空として読む
+  const lastItems = value.settings.lastItems;
+  if (lastItems !== undefined) {
+    if (!Array.isArray(lastItems)) return { ok: false, reason: "settings.lastItems が配列ではありません" };
+    for (const [i, x] of lastItems.entries()) {
+      if (!isRecord(x) || typeof x.id !== "string" || typeof x.name !== "string") return { ok: false, reason: `settings.lastItems の ${i + 1} 件目の形が正しくありません` };
+      if (x.targetDays !== null && x.targetDays !== undefined && typeof x.targetDays !== "number") return { ok: false, reason: `settings.lastItems の ${i + 1} 件目の目安の日数が数ではありません` };
+    }
+  }
   const migrated = migrateSettings(value.settings);
   return {
     ok: true,
     sourceVersion,
     backup: {
       app: BACKUP_APP_NAME, schemaVersion: 2, exportedAt: value.exportedAt, events: ev.items, nagara, revisions, recurrences, markers,
-      settings: { schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents, startView: migrated.startView },
+      settings: { schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents, startView: migrated.startView, lastItems: migrated.lastItems },
     },
   };
 }
@@ -252,5 +261,5 @@ export function mergeEvents(existing: CalendarEvent[], incoming: CalendarEvent[]
 /** 復元時に保存する設定。v1のバックアップは週の始まり・親カテゴリを持たないので、今の設定を残す */
 export function settingsForRestore(backup: BackupFile, sourceVersion: 1 | 2, current: Settings): Settings {
   if (sourceVersion === 2) return backup.settings;
-  return { ...backup.settings, weekStartDay: current.weekStartDay, categoryParents: current.categoryParents, startView: current.startView };
+  return { ...backup.settings, weekStartDay: current.weekStartDay, categoryParents: current.categoryParents, startView: current.startView, lastItems: current.lastItems };
 }

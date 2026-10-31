@@ -29,6 +29,8 @@
     "src/recurrence.ts",
     "src/markerLogic.ts",
     "src/searchLogic.ts",
+    "src/lastLogic.ts",
+    "tests/lastLogic.test.ts",
     "tests/v040.test.ts",
     "tests/dateUtils.test.ts",
     "tests/layout.test.ts",
