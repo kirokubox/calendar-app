@@ -30,6 +30,8 @@
     "src/markerLogic.ts",
     "src/searchLogic.ts",
     "src/lastLogic.ts",
+    "src/placeLogic.ts",
+    "tests/placeLogic.test.ts",
     "tests/lastLogic.test.ts",
     "tests/v040.test.ts",
     "tests/dateUtils.test.ts",

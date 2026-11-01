@@ -5,6 +5,7 @@ import { blockLines, displayTitle } from "./eventLogic";
 import type { PlacedSegment } from "./layout";
 import type { PlanVariant } from "./planLogic";
 import type { CalendarEvent } from "./types";
+import { parsePlace } from "./placeLogic";
 
 /** 日跨ぎイベントの時刻表示用の日付タグ。当日なら空、前日・翌日はその語、それ以外は M/D */
 export function dayTag(local: string, dayKey: string): string {
@@ -58,7 +59,8 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day",
   const shownEnd = seg.displayEnd ?? e.end;
   const timeLabel = `${timePart(shownStart)}${dayTag(shownStart, dayKey)}–${timePart(shownEnd)}${dayTag(shownEnd, dayKey)}`;
   const people = e.people.map((p) => p.trim()).filter((p) => p !== "");
-  const places = e.places.map((p) => p.trim()).filter((p) => p !== "");
+  // ブロックは狭いので、「大分類＞名前」は名前だけ出す（大分類だけのときは大分類）
+  const places = e.places.map((p) => parsePlace(p).detail || p.trim()).filter((p) => p !== "");
   const plus = nagaraLabels.map((l) => `＋${l}`).join(" ");
   const placeText = places.join(" → ");
   // 予定から作った実績（もとは予定だった）

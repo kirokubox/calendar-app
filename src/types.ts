@@ -141,6 +141,9 @@ export interface Settings {
   lastItems: LastItem[];
 }
 
+/** 場所の大分類。場所欄の1件は「大分類＞詳しい名前」か「大分類」だけの文字で持つ（v0.7.0〜） */
+export type PlaceKind = "家" | "職場" | "作業場" | "飲食店" | "外出先" | "移動";
+
 /** 「前回」の一覧の項目。名前で検索し、前回からの日数を出す */
 export interface LastItem {
   id: string;

@@ -12,6 +12,7 @@ import { canApplyFollowing, validateRule } from "./recurrence";
 import { draftsFromNagara, nagaraLabelSuggestions, validateNagaraDrafts, type NagaraDraft } from "./nagaraLogic";
 import { newId } from "./storage";
 import ChipInput from "./ChipInput";
+import PlaceInput from "./PlaceInput";
 import NagaraChips from "./NagaraChips";
 import SessionForm from "./SessionForm";
 import { useBackdropClose } from "./useBackdropClose";
@@ -577,16 +578,7 @@ export default function EventModal({
               </div>
               <div className="detail-col">
                 <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：友人" listId="people-suggestions" />
-                <ChipInput
-                  label="場所・移動（順番あり）"
-                  values={places}
-                  onChange={setPlaces}
-                  suggestions={placeList}
-                  fixed={FIXED_PLACES}
-                  placeholder="例：店名、電車"
-                  reorderable
-                  listId="place-suggestions"
-                />
+                <PlaceInput values={places} onChange={setPlaces} suggestions={placeList} fixed={FIXED_PLACES} listId="place-suggestions" />
               </div>
             </div>
             <label className="field-label" htmlFor="memo-input">メモ</label>

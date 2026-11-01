@@ -1,6 +1,6 @@
-import type { ParentCategory, Settings } from "./types.js";
+import type { ParentCategory, PlaceKind, Settings } from "./types.js";
 
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.7.0";
 export const BACKUP_APP_NAME = "calendar-app";
 
 export const COLOR_IDS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"] as const;
@@ -63,10 +63,16 @@ export const DB_SCHEMA_VERSION = 2;
 
 /** ながらの固定候補（履歴候補・自由入力と併用） */
 export const FIXED_NAGARA = ["YouTube", "音楽", "Spoon", "アニメ"];
-/** 場所の固定候補（履歴候補・自由入力と併用） */
-export const FIXED_PLACES = ["家", "職場", "カフェ", "電車", "徒歩"];
+/** 場所の固定候補（履歴候補・自由入力と併用）。v0.7.0から「大分類＞詳しい名前」の形 */
+export const FIXED_PLACES = ["家", "職場", "移動＞電車", "移動＞徒歩"];
+/** 場所の大分類と詳しい名前の区切り */
+export const PLACE_SEP = "＞";
 /** マーカーの固定候補（履歴候補・自由入力と併用） */
 export const FIXED_MARKERS = ["家を出た", "目的地着", "目的地発", "帰宅", "会社着", "会社発"];
+/** 場所の大分類（イベントの入力で選ぶ） */
+export const PLACE_KINDS: PlaceKind[] = ["家", "職場", "作業場", "飲食店", "外出先", "移動"];
+/** 移動手段とみなす場所（細分類の自動判定と、大分類のない古い場所の判定に使う） */
+export const MOVING_PLACE = /電車|徒歩|バス|タクシー|自転車|新幹線|飛行機|移動|^車$/;
 /** 継続中のセッション・睡眠を「長時間」として目立たせる分数 */
 export const LONG_RUNNING_MINUTES = 12 * 60;
 

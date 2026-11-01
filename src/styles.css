@@ -541,3 +541,8 @@ button { cursor: pointer; }
 .last-edit-target { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--kb-fs-s); color: var(--kb-text-2); }
 .last-edit-target input { width: 3.6em; padding: 8px 6px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); font: inherit; text-align: right; }
 .search-memo { font-size: var(--kb-fs-s); color: var(--kb-text-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; word-break: break-all; }
+
+/* 入力：場所の大分類 */
+.place-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.place-kind { min-height: 32px; padding: 0 12px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-pill); background: #fff; color: var(--kb-text); font: inherit; font-size: 0.85rem; }
+.place-kind.selected { border-color: var(--accent-dark); background: var(--kb-accent-soft); font-weight: 700; }

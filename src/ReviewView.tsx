@@ -229,6 +229,24 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
               </table>
             </div>
           )}
+          <h3>場所の大分類ごとの時間</h3>
+          <p className="hint">イベントの入力で選んだ大分類でまとめます。場所が複数でも大分類が1つなら、その大分類だけに入ります。大分類を選んでいない場所は「未分類」です（家・職場・電車・徒歩などは自動）。</p>
+          {stats.placeKindTotals.length === 0 ? <p className="hint">この期間の場所はありません。</p> : (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>大分類</th><th>その大分類だけ</th><th>複数のうち</th></tr></thead>
+                <tbody>
+                  {stats.placeKindTotals.map((p) => (
+                    <tr key={p.label}>
+                      <td>{p.label}</td>
+                      <td>{formatDuration(p.minutes)}（{formatPercent(p.minutes, total)}）</td>
+                      <td>{p.sharedMinutes > 0 ? formatDuration(p.sharedMinutes) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <h3>場所・移動ごとの時間</h3>
           <p className="hint">その場所だけ＝場所が1つのイベントと場所セッション。複数のうち＝場所を複数持つイベントの長さ（内訳は分からないので、足し合わせません）。</p>
           {stats.placeTotals.length === 0 ? <p className="hint">この期間の場所はありません。</p> : (
