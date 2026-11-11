@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COLOR_HEX, COLOR_IDS, FIXED_NAGARA, FIXED_PLACES } from "./constants";
 import { addDays, datePart, formatShortDate, joinLocal, timePart, toLocal, weekdayName } from "./dateUtils";
 import {
@@ -146,6 +146,18 @@ export default function EventModal({
   const [busy, setBusy] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState("");
+  const [sessionDirty, setSessionDirty] = useState(false);
+
+  const eventFormSnapshot = JSON.stringify({
+    title, people, places, memo, subcategory, drafts, allDay, startDate, startTime, endDate, endTime, lastDate,
+    colorId, kindChoice, weekdays, ruleStart, ruleEnd, excludeHolidays, cancelReason,
+  });
+  const initialEventFormSnapshot = useRef(eventFormSnapshot);
+  const eventDirty = eventFormSnapshot !== initialEventFormSnapshot.current;
+  const requestPassiveClose = useCallback(() => {
+    if ((eventDirty || sessionDirty) && !window.confirm("閉じると入力が消えます。閉じますか？")) return;
+    onClose();
+  }, [eventDirty, onClose, sessionDirty]);
 
   const suggestions = useMemo(() => titleSuggestions(events), [events]);
   const peopleList = useMemo(() => peopleSuggestions(events), [events]);
@@ -154,13 +166,13 @@ export default function EventModal({
   const nagaraList = useMemo(() => nagaraLabelSuggestions(nagara, "nagara"), [nagara]);
   const sessionLabelList = useMemo(() => nagaraLabelSuggestions(nagara), [nagara]);
   // 外側のタップは「閉じる」と同じ扱い（保存しない）
-  const backdrop = useBackdropClose(onClose);
+  const backdrop = useBackdropClose(requestPassiveClose);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") requestPassiveClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [requestPassiveClose]);
 
   const start = allDay ? buildAllDayRange(startDate, lastDate).start : joinLocal(startDate, startTime);
   const end = allDay ? buildAllDayRange(startDate, lastDate).end : joinLocal(endDate, endTime);
@@ -667,6 +679,7 @@ export default function EventModal({
               labelSuggestions={sessionLabelList}
               now={now}
               defaultOngoing={sessionOngoing}
+              onDirtyChange={setSessionDirty}
               onSave={onSaveSession}
               onDelete={onDeleteSession}
             />

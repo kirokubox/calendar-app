@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addMinutes, datePart, formatShortDate, joinLocal, timePart } from "./dateUtils";
 import { deriveEndDate, isNextDay, shiftEnd } from "./eventLogic";
 import type { Range } from "./eventLogic";
@@ -14,6 +14,7 @@ interface Props {
   now: string;
   /** 新規のとき、終了を入れない「継続中」から始めるか（開始は現在時刻にする） */
   defaultOngoing?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
   onSave: (n: Nagara) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
@@ -21,7 +22,7 @@ interface Props {
 const TYPE_LABEL: Record<NagaraType, string> = { nagara: "ながら", place: "場所" };
 
 /** ながらセッション（eventIdなし・時間あり）の入力。終了を入れない「継続中」でも保存できる */
-export default function SessionForm({ session, range, labelSuggestions, now, defaultOngoing = false, onSave, onDelete }: Props) {
+export default function SessionForm({ session, range, labelSuggestions, now, defaultOngoing = false, onDirtyChange, onSave, onDelete }: Props) {
   const editing = session !== null;
   const startsOngoing = editing ? session.end === null : defaultOngoing;
   const initStart = session?.start ?? (startsOngoing ? now : range?.start) ?? now;
@@ -41,6 +42,12 @@ export default function SessionForm({ session, range, labelSuggestions, now, def
   );
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  const formSnapshot = JSON.stringify({ label, type, ongoing, startDate, startTime, endDate, endTime });
+  const initialFormSnapshot = useRef(formSnapshot);
+  useEffect(() => {
+    onDirtyChange?.(formSnapshot !== initialFormSnapshot.current);
+  }, [formSnapshot, onDirtyChange]);
 
   const start = joinLocal(startDate, startTime);
   const end = joinLocal(endDate, endTime);
