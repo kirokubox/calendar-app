@@ -198,7 +198,7 @@ export default function App() {
   }, [dayKey, loaded, view, viewMode, weekKeys, fourKeys]);
 
   const linked = useMemo(() => linkedPlanIds(events), [events]);
-  const dayLayout = useMemo(() => layoutDayWithPlans(events, dayKey, linked), [events, dayKey, linked]);
+  const dayLayout = useMemo(() => layoutDayWithPlans(events, dayKey, linked, nowLocal), [events, dayKey, linked, nowLocal]);
   const allDayEvents = useMemo(
     () => allDayEventsOn(events, dayKey).filter((event) => !(event.kind === "plan" && linked.has(event.id))),
     [events, dayKey, linked],

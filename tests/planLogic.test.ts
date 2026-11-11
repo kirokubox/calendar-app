@@ -48,7 +48,7 @@ test("未確定判定：過ぎた・有効・リンクなしの予定だけ", ()
   assert.equal(isUnconfirmed(ev("a", "x", "2026-10-08T10:00", "2026-10-08T11:00", { kind: "actual" }), none, now), false, "実績");
 });
 
-test("日の切り分け：実績で埋まった予定は消え、キャンセルだけ背面", () => {
+test("日の切り分け：終了した実績化済み予定とキャンセルは背面", () => {
   const events = [
     ev("p1", "会議", "2026-10-08T10:00", "2026-10-08T11:00"),
     ev("a1", "会議", "2026-10-08T10:00", "2026-10-08T11:00", { kind: "actual", planId: "p1" }),
@@ -58,7 +58,7 @@ test("日の切り分け：実績で埋まった予定は消え、キャンセ�
   const { front, back } = layoutDayWithPlans(events, "2026-10-08", linkedPlanIds(events));
   assert.deepEqual(front.map((s) => s.event.id).sort(), ["a1", "n1"]);
   assert.equal(front[0].cols, 2, "前面の2件だけで2列");
-  assert.deepEqual(back.map((b) => [b.seg.event.id, b.variant]), [["c1", "cancelled"]]);
+  assert.deepEqual(back.map((b) => [b.seg.event.id, b.variant]), [["p1", "linked"], ["c1", "cancelled"]]);
 });
 
 test("予定の未消化範囲：実績化した部分だけを引き、残りを時刻順に返す", () => {
@@ -72,9 +72,37 @@ test("予定の未消化範囲：実績化した部分だけを引き、残り�
     { start: "2026-10-08T14:00", end: "2026-10-08T15:00" },
     { start: "2026-10-08T16:30", end: "2026-10-08T17:30" },
   ]);
-  const { front, back } = layoutDayWithPlans(events, "2026-10-08", linkedPlanIds(events));
+  const { front, back } = layoutDayWithPlans(events, "2026-10-08", linkedPlanIds(events), "2026-10-08T16:45");
   const remains = front.filter((segment) => segment.event.id === "p1");
   assert.deepEqual(remains.map((segment) => [segment.startMin, segment.endMin]), [[840, 900], [990, 1050]]);
+  assert.equal(back.length, 0);
+});
+
+test("終了した予定は遅れ・早上がり・分割実績でも元予定を背面に1つだけ出す", () => {
+  const plan = ev("p1", "遊び", "2026-11-03T14:00", "2026-11-03T17:00");
+  const cases = [
+    [ev("a1", "遊び", "2026-11-03T14:30", "2026-11-03T17:00", { kind: "actual", planId: "p1" })],
+    [ev("a1", "遊び", "2026-11-03T14:00", "2026-11-03T16:30", { kind: "actual", planId: "p1" })],
+    [
+      ev("a1", "遊び1", "2026-11-03T14:15", "2026-11-03T15:00", { kind: "actual", planId: "p1" }),
+      ev("a2", "遊び2", "2026-11-03T15:30", "2026-11-03T16:45", { kind: "actual", planId: "p1" }),
+    ],
+  ];
+  for (const actuals of cases) {
+    const events = [plan, ...actuals];
+    const { front, back } = layoutDayWithPlans(events, "2026-11-03", linkedPlanIds(events), "2026-11-03T18:00");
+    assert.equal(front.some((segment) => segment.event.id === plan.id), false, "予定の残りは前面へ出さない");
+    assert.deepEqual(back.map((item) => [item.seg.event.id, item.variant]), [["p1", "linked"]]);
+    assert.equal(front.filter((segment) => segment.event.kind === "actual").length, actuals.length);
+  }
+});
+
+test("まだ終わっていないリンク済み予定は残りを前面に出す", () => {
+  const plan = ev("p1", "作業", "2026-11-03T14:00", "2026-11-03T17:00");
+  const actual = ev("a1", "作業", "2026-11-03T14:00", "2026-11-03T15:00", { kind: "actual", planId: "p1" });
+  const events = [plan, actual];
+  const { front, back } = layoutDayWithPlans(events, "2026-11-03", linkedPlanIds(events), "2026-11-03T15:30");
+  assert.deepEqual(front.filter((segment) => segment.event.id === "p1").map((segment) => [segment.startMin, segment.endMin]), [[900, 1020]]);
   assert.equal(back.length, 0);
 });
 

@@ -45,7 +45,7 @@ export default function WeekView({
   const columns = useMemo(
     () => dayKeys.map((k) => ({
       key: k,
-      layout: layoutDayWithPlans(events, k, linked),
+      layout: layoutDayWithPlans(events, k, linked, nowLocal),
       allDay: allDayEventsOn(events, k).filter((event) => !(event.kind === "plan" && linked.has(event.id))),
       sessions: four ? layoutSessions(sessionSegmentsForDay(nagara, k, nowLocal)) : [],
       markers: markersForDay(markers, k),

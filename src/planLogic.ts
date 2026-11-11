@@ -69,12 +69,17 @@ export interface PlacedBackground {
   variant: PlanVariant;
 }
 
-/** その日の表示用の切り分け：実績化した予定は未消化範囲だけを出し、キャンセル予定は背面へ分ける */
-export function layoutDayWithPlans(events: CalendarEvent[], dayKey: string, linked: Set<string>): { front: PlacedSegment[]; back: PlacedBackground[] } {
+/** その日の表示用の切り分け：終了したリンク済み予定とキャンセル予定は背面へ、未終了の残りだけ前面へ分ける */
+export function layoutDayWithPlans(events: CalendarEvent[], dayKey: string, linked: Set<string>, now = `${dayKey}T23:59`): { front: PlacedSegment[]; back: PlacedBackground[] } {
   const frontSegs: DaySegment[] = [];
   const back: PlacedBackground[] = [];
   for (const e of events) {
     if (e.kind === "plan" && e.status !== "cancelled" && linked.has(e.id)) {
+      if (e.end < now) {
+        const seg = clipToDay(e, dayKey);
+        if (seg) back.push({ seg, variant: "linked" });
+        continue;
+      }
       for (const range of remainingPlanRanges(e, events)) {
         const clipped = clipRangeToDay(range.start, range.end, dayKey);
         if (clipped) frontSegs.push({ event: e, ...clipped, displayStart: range.start, displayEnd: range.end });
