@@ -123,7 +123,7 @@ export interface ActiveSleep {
   nap: boolean;
 }
 
-export type StartView = "day" | "fourDay" | "week" | "month";
+export type StartView = "day" | "week" | "month";
 
 export type ParentCategory = "睡眠" | "生活" | "仕事" | "自由時間" | "その他";
 
@@ -137,6 +137,10 @@ export interface Settings {
   categoryParents: Record<string, ParentCategory>;
   /** 起動時の表示（既定は週） */
   startView: StartView;
+  /** 平日の就寝予定時刻。未設定は null。0:00〜4:59 は翌日の未明として扱う */
+  weekdayBedtime: string | null;
+  /** 休日（土日・祝日）の就寝予定時刻。未設定は null */
+  holidayBedtime: string | null;
   /** 検索画面の「前回」の一覧に出す項目（v0.6.0〜。無い設定・バックアップは空として読む）。並びは登録した順 */
   lastItems: LastItem[];
 }

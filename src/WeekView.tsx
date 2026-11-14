@@ -1,23 +1,19 @@
 import { useMemo } from "react";
-import { FOUR_DAY_HOUR_HEIGHT, FOUR_DAY_LANE_WIDTH, WEEK_HOUR_HEIGHT } from "./constants";
+import { WEEK_HOUR_HEIGHT } from "./constants";
 import { parseDateKey, weekdayName, weekendClass } from "./dateUtils";
 import { rangeFromTap, type Range } from "./eventLogic";
 import { holidayName, shortHolidayName } from "./holidays";
 import { allDayEventsOn } from "./layout";
 import { markersForDay } from "./markerLogic";
-import { layoutSessions, sessionSegmentsForDay } from "./nagaraLogic";
 import { isUnconfirmed, layoutDayWithPlans } from "./planLogic";
 import EventBlock, { eventStyle } from "./EventBlock";
 import MarkerPins from "./MarkerPins";
 import { displayTitle } from "./eventLogic";
-import type { CalendarEvent, Marker, Nagara } from "./types";
+import type { CalendarEvent, Marker } from "./types";
 
 interface Props {
-  /** week＝7日（俯瞰用。タイトル中心）、four＝4日（ながら・場所・セッション帯まで読める） */
-  density: "week" | "four";
   dayKeys: string[];
   events: CalendarEvent[];
-  nagara: Nagara[];
   markers: Marker[];
   labelsByEvent: Map<string, string[]>;
   /** 実績がリンクされた予定のid */
@@ -29,28 +25,24 @@ interface Props {
   nowMin: number;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   onOpenEvent: (event: CalendarEvent) => void;
-  onOpenSession: (n: Nagara) => void;
   onOpenMarker: (m: Marker) => void;
   onCreate: (range: Range) => void;
   onOpenDay: (dayKey: string) => void;
 }
 
-/** 複数日の表示（週＝7日、4日）：日ごとの列＋時間軸 */
+/** 週表示：日ごとの列＋時間軸 */
 export default function WeekView({
-  density, dayKeys, events, nagara, markers, labelsByEvent, linked, nowLocal, todayKey, nowMin, scrollRef, onOpenEvent, onOpenSession, onOpenMarker, onCreate, onOpenDay,
+  dayKeys, events, markers, labelsByEvent, linked, nowLocal, todayKey, nowMin, scrollRef, onOpenEvent, onOpenMarker, onCreate, onOpenDay,
 }: Props) {
-  const four = density === "four";
-  const hourHeight = four ? FOUR_DAY_HOUR_HEIGHT : WEEK_HOUR_HEIGHT;
-  const laneWidth = four ? FOUR_DAY_LANE_WIDTH : 0;
+  const hourHeight = WEEK_HOUR_HEIGHT;
   const columns = useMemo(
     () => dayKeys.map((k) => ({
       key: k,
       layout: layoutDayWithPlans(events, k, linked, nowLocal),
       allDay: allDayEventsOn(events, k).filter((event) => !(event.kind === "plan" && linked.has(event.id))),
-      sessions: four ? layoutSessions(sessionSegmentsForDay(nagara, k, nowLocal)) : [],
       markers: markersForDay(markers, k),
     })),
-    [dayKeys, events, linked, nagara, markers, four, nowLocal],
+    [dayKeys, events, linked, markers, nowLocal],
   );
   const hasAllDay = columns.some((c) => c.allDay.length > 0);
   const gridColumns = { gridTemplateColumns: `var(--gutter) repeat(${dayKeys.length}, minmax(0, 1fr))` };
@@ -63,7 +55,7 @@ export default function WeekView({
 
   return (
     <>
-      <div className={`week-head ${four ? "four" : ""}`} style={gridColumns}>
+      <div className="week-head" style={gridColumns}>
         <span className="week-gutter" />
         {columns.map((c) => {
           const holiday = holidayName(c.key);
@@ -103,13 +95,13 @@ export default function WeekView({
           <div className="week-cols" style={{ backgroundSize: `100% ${hourHeight}px`, gridTemplateColumns: `repeat(${dayKeys.length}, minmax(0, 1fr))` }}>
             {columns.map((c) => (
               <div key={c.key} className={`week-col ${c.key === todayKey ? "today" : ""}`} onClick={(ev) => onColumnClick(c.key, ev)}>
-                <div className="week-events" style={{ right: laneWidth }}>
+                <div className="week-events">
                   {c.layout.back.map(({ seg, variant }) => (
                     <EventBlock
                       key={`${seg.event.id}-${c.key}`}
                       seg={{ ...seg, col: 0, cols: 1 }}
                       dayKey={c.key}
-                      density={density}
+                      density="week"
                       hourHeight={hourHeight}
                       variant={variant}
                       nagaraLabels={[]}
@@ -122,37 +114,15 @@ export default function WeekView({
                       seg={seg}
                       dayKey={c.key}
                       unconfirmed={isUnconfirmed(seg.event, linked, nowLocal)}
-                      density={density}
+                      density="week"
                       hourHeight={hourHeight}
                       nagaraLabels={labelsByEvent.get(seg.event.id) ?? []}
                       onOpen={() => onOpenEvent(seg.event)}
                     />
                   ))}
-                  <MarkerPins items={c.markers} hourHeight={hourHeight} mode={four ? "label" : "dot"} onOpen={onOpenMarker} />
+                  <MarkerPins items={c.markers} hourHeight={hourHeight} mode="dot" onOpen={onOpenMarker} />
                   {c.key === todayKey && <div className="now-line" style={{ top: (nowMin / 60) * hourHeight }}><i /></div>}
                 </div>
-                {four && (
-                  <div className="week-lane" style={{ width: laneWidth }}>
-                    {c.sessions.map((s) => {
-                      const n = s.nagara;
-                      const top = (s.startMin / 60) * hourHeight;
-                      const height = Math.max(((s.endMin - s.startMin) / 60) * hourHeight - 1, 12);
-                      return (
-                        <button
-                          key={`${n.id}-${c.key}`}
-                          type="button"
-                          className={`session ${n.type} ${n.end === null ? "ongoing" : ""}`}
-                          style={{ top, height, left: `${(s.col / s.cols) * 100}%`, width: `calc(${100 / s.cols}% - 1px)` }}
-                          title={`${n.type === "place" ? "場所" : "ながら"}：${n.label}`}
-                          aria-label={`${n.type === "place" ? "場所" : "ながら"}セッション：${n.label}`}
-                          onClick={(ev) => { ev.stopPropagation(); onOpenSession(n); }}
-                        >
-                          <span>{n.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             ))}
           </div>

@@ -16,6 +16,10 @@ function strOrNull(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
+function timeOrNull(v: unknown): string | null {
+  return typeof v === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : null;
+}
+
 /** v2で追加した項目の既定値 */
 export function eventDefaults(): Pick<
   CalendarEvent,
@@ -75,9 +79,16 @@ export function migrateSettings(raw: unknown): Settings {
       if (typeof v === "string" && (PARENT_CATEGORIES as string[]).includes(v)) categoryParents[key] = v as ParentCategory;
     }
   }
-  const startView =
-    raw.startView === "day" || raw.startView === "fourDay" || raw.startView === "week" || raw.startView === "month" ? raw.startView : base.startView;
-  return { schemaVersion: 2, colorLabels, weekStartDay, categoryParents, startView, lastItems: migrateLastItems(raw.lastItems) };
+  // 廃止した4日表示の設定・バックアップは、読めなくせず日表示へ移す。
+  const startView = raw.startView === "fourDay"
+    ? "day"
+    : raw.startView === "day" || raw.startView === "week" || raw.startView === "month" ? raw.startView : base.startView;
+  return {
+    schemaVersion: 2, colorLabels, weekStartDay, categoryParents, startView,
+    weekdayBedtime: timeOrNull(raw.weekdayBedtime),
+    holidayBedtime: timeOrNull(raw.holidayBedtime),
+    lastItems: migrateLastItems(raw.lastItems),
+  };
 }
 
 /** 目安の日数：1以上の整数だけ残す。それ以外は目安なし */

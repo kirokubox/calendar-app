@@ -31,6 +31,8 @@
     "src/searchLogic.ts",
     "src/lastLogic.ts",
     "src/placeLogic.ts",
+    "src/bedtimeLogic.ts",
+    "tests/bedtimeLogic.test.ts",
     "tests/placeLogic.test.ts",
     "tests/lastLogic.test.ts",
     "tests/v040.test.ts",

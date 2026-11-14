@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBackup, validateBackup } from "../src/backup.js";
 import { defaultSettings } from "../src/constants.js";
-import { fourDayKeys, formatRangeLabel } from "../src/dateUtils.js";
 import { blockLines, titleTokens } from "../src/eventLogic.js";
-import { markerCandidates, markersForDay, markersWithGaps } from "../src/markerLogic.js";
+import { markerCandidates, markersForDay, markersWithGaps, nextCommuteMarker } from "../src/markerLogic.js";
 import { eventDefaults, migrateSettings } from "../src/migrate.js";
 import {
   isOngoing, isSession, ongoingSessions, resolveNagara, sessionInterval, sessionLabelsOverlapping, sessionSegmentsForDay, validateSession,
@@ -31,15 +30,25 @@ function mk(id: string, label: string, at: string): Marker {
 
 const WEEK = periodOf("week", "2026-10-08", 1);
 
-test("4日表示：基準日の前日から2日後まで（今日が基準なら 昨日・今日・明日・明後日）", () => {
-  assert.deepEqual(fourDayKeys("2026-10-11"), ["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13"]);
-  assert.deepEqual(fourDayKeys("2026-01-01"), ["2025-12-31", "2026-01-01", "2026-01-02", "2026-01-03"]);
-  assert.equal(formatRangeLabel("2026-10-10", "2026-10-13"), "10/10(土)〜10/13(火)");
+test("設定：廃止した4日表示は日表示へ移し、知らない値は週へ戻す", () => {
+  assert.equal(migrateSettings({ ...defaultSettings(), startView: "fourDay" }).startView, "day");
+  assert.equal(migrateSettings({ ...defaultSettings(), startView: "five" }).startView, "week");
 });
 
-test("設定：起動時の表示に4日を選べる。知らない値は週へ戻す", () => {
-  assert.equal(migrateSettings({ ...defaultSettings(), startView: "fourDay" }).startView, "fourDay");
-  assert.equal(migrateSettings({ ...defaultSettings(), startView: "five" }).startView, "week");
+test("通勤マーカー：平日の最初と、最後に記録した組の次を返す", () => {
+  assert.equal(nextCommuteMarker([], "2026-11-16"), "家を出た");
+  assert.equal(nextCommuteMarker([mk("a", "家を出た", "2026-11-16T08:00")], "2026-11-16"), "会社着");
+  assert.equal(nextCommuteMarker([
+    mk("a", "家を出た", "2026-11-16T08:00"),
+    mk("x", "開場", "2026-11-16T08:30"),
+    mk("b", "会社着", "2026-11-16T09:00"),
+  ], "2026-11-16"), "会社発");
+  assert.equal(nextCommuteMarker([mk("a", "帰宅", "2026-11-16T20:00")], "2026-11-16"), null);
+});
+
+test("通勤マーカー：土日・祝日に組の記録が無ければ候補を出さない", () => {
+  assert.equal(nextCommuteMarker([], "2026-11-15"), null);
+  assert.equal(nextCommuteMarker([], "2026-11-23"), null);
 });
 
 test("ブロックの行数：タイトルは最大3行。足りないときは 時刻→場所→ながら→人の行 の順に省く", () => {

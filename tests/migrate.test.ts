@@ -69,3 +69,13 @@ test("設定：保存済みの週の始まり・親カテゴリは保持、不�
   assert.equal(bad.categoryParents["4"], "その他");
   assert.deepEqual(migrateSettings(undefined), defaultSettings());
 });
+
+test("設定：就寝予定は正しい時刻だけ保持し、古い設定は未設定で読む", () => {
+  const old = migrateSettings({ ...defaultSettings(), weekdayBedtime: undefined, holidayBedtime: undefined });
+  assert.equal(old.weekdayBedtime, null);
+  assert.equal(old.holidayBedtime, null);
+  const ok = migrateSettings({ ...defaultSettings(), weekdayBedtime: "01:00", holidayBedtime: "23:30" });
+  assert.equal(ok.weekdayBedtime, "01:00");
+  assert.equal(ok.holidayBedtime, "23:30");
+  assert.equal(migrateSettings({ ...defaultSettings(), weekdayBedtime: "25:00" }).weekdayBedtime, null);
+});

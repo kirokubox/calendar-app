@@ -53,6 +53,9 @@ export default function SettingsView({
   const [parentMessage, setParentMessage] = useState("");
   const [weekMessage, setWeekMessage] = useState("");
   const [startMessage, setStartMessage] = useState("");
+  const [weekdayBedtime, setWeekdayBedtime] = useState(settings.weekdayBedtime ?? "");
+  const [holidayBedtime, setHolidayBedtime] = useState(settings.holidayBedtime ?? "");
+  const [bedtimeMessage, setBedtimeMessage] = useState("");
   const [pending, setPending] = useState<{ backup: BackupFile; summary: BackupSummary; fileName: string; sourceVersion: 1 | 2 } | null>(null);
   const [restoreError, setRestoreError] = useState("");
   const [restoreMessage, setRestoreMessage] = useState("");
@@ -113,6 +116,21 @@ export default function SettingsView({
     setBusy(false);
   };
 
+  const saveBedtimes = async () => {
+    setBusy(true);
+    try {
+      await onSaveSettings({
+        ...settings,
+        weekdayBedtime: weekdayBedtime || null,
+        holidayBedtime: holidayBedtime || null,
+      });
+      setBedtimeMessage("保存しました");
+    } catch (e) {
+      setBedtimeMessage(e instanceof Error ? e.message : "保存できませんでした");
+    }
+    setBusy(false);
+  };
+
   const exportJson = () => {
     const now = new Date();
     const backup = buildBackup(events, settings, now.toISOString(), { nagara, revisions, recurrences, markers });
@@ -154,6 +172,9 @@ export default function SettingsView({
       await onRestore(pending.backup, pending.sourceVersion);
       setLabels({ ...pending.backup.settings.colorLabels });
       if (pending.sourceVersion === 2) setParents({ ...pending.backup.settings.categoryParents });
+      const restoredSettings = pending.sourceVersion === 2 ? pending.backup.settings : settings;
+      setWeekdayBedtime(restoredSettings.weekdayBedtime ?? "");
+      setHolidayBedtime(restoredSettings.holidayBedtime ?? "");
       setRestoreCount((n) => n + 1);
       setRestoreMessage(`${pending.summary.count}件を読み込みました`);
       setPending(null);
@@ -253,11 +274,24 @@ export default function SettingsView({
               onChange={(e) => changeStartView(e.target.value as StartView)}
             >
               <option value="day">日</option>
-              <option value="fourDay">4日（昨日〜明後日）</option>
               <option value="week">週</option>
               <option value="month">月</option>
             </select>
             {startMessage && <span className="hint">{startMessage}</span>}
+          </div>
+        </section>
+
+        <section>
+          <h2>就寝予定の時刻</h2>
+          <p className="hint">日表示で今日を開いたとき、就寝までの残り時間を出します。0:00〜4:59は翌日の未明として扱います。</p>
+          <div className="bedtime-settings">
+            <label><span>平日</span><input type="time" value={weekdayBedtime} onChange={(e) => { setWeekdayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
+            <label><span>休日（土日・祝日）</span><input type="time" value={holidayBedtime} onChange={(e) => { setHolidayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
+          </div>
+          <div className="inline-actions">
+            <button type="button" className="primary-btn" onClick={saveBedtimes} disabled={busy}>就寝予定を保存</button>
+            <button type="button" className="text-btn small" onClick={() => { setWeekdayBedtime(""); setHolidayBedtime(""); setBedtimeMessage(""); }} disabled={busy}>両方クリア</button>
+            {bedtimeMessage && <span className="hint">{bedtimeMessage}</span>}
           </div>
         </section>
 

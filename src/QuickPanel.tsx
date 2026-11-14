@@ -3,6 +3,7 @@ import type { ActiveSleep } from "./types";
 
 interface Props {
   markerCandidates: string[];
+  nextMarkerCandidate: string | null;
   /** ながらを始める候補（すでに継続中のラベルは除いてある） */
   sessionCandidates: string[];
   sleep: ActiveSleep | null;
@@ -17,7 +18,7 @@ interface Props {
  * 「いま」を1〜2タップで残す小さなパネル。入力シートは開かず、押した時点の時刻でそのまま保存する。
  * マーカー（時刻だけ）・ながらの開始（継続中のセッション）・就寝と起床。
  */
-export default function QuickPanel({ markerCandidates, sessionCandidates, sleep, onMarker, onStartSession, onSleep, onWake, onClose }: Props) {
+export default function QuickPanel({ markerCandidates, nextMarkerCandidate, sessionCandidates, sleep, onMarker, onStartSession, onSleep, onWake, onClose }: Props) {
   const [markerText, setMarkerText] = useState("");
   const [sessionText, setSessionText] = useState("");
 
@@ -31,8 +32,14 @@ export default function QuickPanel({ markerCandidates, sessionCandidates, sleep,
         </div>
 
         <span className="field-label">マーカー（時刻だけ）</span>
+        {nextMarkerCandidate && (
+          <button type="button" className="quick-next" onClick={() => onMarker(nextMarkerCandidate)}>
+            <small>次の候補</small>
+            <strong>{nextMarkerCandidate}</strong>
+          </button>
+        )}
         <div className="quick-list">
-          {markerCandidates.map((label) => (
+          {markerCandidates.filter((label) => label !== nextMarkerCandidate).map((label) => (
             <button key={label} type="button" className="quick solid" onClick={() => onMarker(label)}>{label}</button>
           ))}
         </div>

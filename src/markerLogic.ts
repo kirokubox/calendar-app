@@ -1,6 +1,9 @@
 // マーカー（時刻だけの記録）の純粋ロジック：検証・並べ替え・経過時間・候補。
 import { addDays, datePart, diffMinutes, isLocalDateTime, joinLocal, timeToMinutes, timePart } from "./dateUtils.js";
+import { isHoliday } from "./holidays.js";
 import type { Marker } from "./types.js";
+
+export const COMMUTE_MARKERS = ["家を出た", "会社着", "会社発", "帰宅"] as const;
 
 /** 直前のマーカーからの経過時間を出す上限（これより離れていたら、つながりとして扱わない） */
 export const MARKER_GAP_LIMIT_MINUTES = 24 * 60;
@@ -63,6 +66,18 @@ export function markerCandidates(fixed: string[], markers: Marker[], historyCoun
     added++;
   }
   return out;
+}
+
+/** 今日の通勤マーカーから、次に記録する候補を1つ返す。休日・帰宅後は候補なし。 */
+export function nextCommuteMarker(markers: Marker[], todayKey: string): string | null {
+  const todayCommute = sortMarkers(markers.filter((m) => datePart(m.at) === todayKey && (COMMUTE_MARKERS as readonly string[]).includes(m.label)));
+  if (todayCommute.length === 0) {
+    const day = new Date(`${todayKey}T00:00:00`).getDay();
+    return day === 0 || day === 6 || isHoliday(todayKey) ? null : COMMUTE_MARKERS[0];
+  }
+  const last = todayCommute[todayCommute.length - 1];
+  const index = COMMUTE_MARKERS.indexOf(last.label as typeof COMMUTE_MARKERS[number]);
+  return index >= 0 && index < COMMUTE_MARKERS.length - 1 ? COMMUTE_MARKERS[index + 1] : null;
 }
 
 /** 表示用：当日なら時刻だけ、前日なら「前日 HH:mm」、それ以外は「M/D HH:mm」 */

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { COLOR_KEYS, FIXED_MARKERS, FIXED_NAGARA, FOUR_DAY_HOUR_HEIGHT, HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
+import { COLOR_KEYS, FIXED_MARKERS, FIXED_NAGARA, HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
 import {
-  addDays, addMinutes, addMonths, dateKeyOf, diffMinutes, formatDayLabel, formatMonthLabel, formatRangeLabel, formatShortDate, formatWeekRangeLabel, fourDayKeys,
+  addDays, addMinutes, addMonths, dateKeyOf, diffMinutes, formatDayLabel, formatMonthLabel, formatShortDate, formatWeekRangeLabel,
   startOfMonth, startOfWeek, timePart, toLocal, weekDayKeys, weekendClass,
 } from "./dateUtils";
+import { bedtimeSummary } from "./bedtimeLogic";
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
 import { allDayEventsOn } from "./layout";
-import { markerCandidates, markersForDay } from "./markerLogic";
+import { markerCandidates, markersForDay, nextCommuteMarker } from "./markerLogic";
 import { eventDefaults } from "./migrate";
 import {
   continueRange,
@@ -36,15 +37,16 @@ import MonthView from "./MonthView";
 import QuickPanel from "./QuickPanel";
 import ReviewView from "./ReviewView";
 import type { PeriodKind } from "./reviewLogic";
+import { formatDuration } from "./reviewLogic";
 import RunningBand from "./RunningBand";
 import SearchView from "./SearchView";
 import type { SearchQuery } from "./searchLogic";
 import SettingsView from "./SettingsView";
 import WeekView from "./WeekView";
 import { mergeById, settingsForRestore } from "./backup";
-import type { ActiveSleep, BackupFile, CalendarEvent, ColorId, Marker, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types";
+import type { ActiveSleep, BackupFile, CalendarEvent, ColorId, Marker, Nagara, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
 
-type ViewMode = "day" | "fourDay" | "week" | "month";
+type ViewMode = StartView;
 type ModalState =
   | { mode: "new"; range: Range; tab: ModalTab; template?: CalendarEvent; ongoing?: boolean; keepEnd?: boolean }
   | { mode: "edit"; event: CalendarEvent }
@@ -60,9 +62,9 @@ interface Toast {
   actions: Array<{ label: string; run: () => void }>;
 }
 
-const VIEW_MODES: ViewMode[] = ["day", "fourDay", "week", "month"];
-const VIEW_LABEL: Record<ViewMode, string> = { day: "日", fourDay: "4日", week: "週", month: "月" };
-const VIEW_HOUR_HEIGHT: Record<ViewMode, number> = { day: HOUR_HEIGHT, fourDay: FOUR_DAY_HOUR_HEIGHT, week: WEEK_HOUR_HEIGHT, month: HOUR_HEIGHT };
+const VIEW_MODES: ViewMode[] = ["day", "week", "month"];
+const VIEW_LABEL: Record<ViewMode, string> = { day: "日", week: "週", month: "月" };
+const VIEW_HOUR_HEIGHT: Record<ViewMode, number> = { day: HOUR_HEIGHT, week: WEEK_HOUR_HEIGHT, month: HOUR_HEIGHT };
 const TOAST_MS = 9000;
 const EMPTY_QUERY: SearchQuery = { text: "", field: "all", from: "", to: "", kind: "all" };
 
@@ -175,9 +177,8 @@ export default function App() {
   };
 
   const weekKeys = useMemo(() => weekDayKeys(dayKey, weekStartDay), [dayKey, weekStartDay]);
-  const fourKeys = useMemo(() => fourDayKeys(dayKey), [dayKey]);
   const isCurrent =
-    viewMode === "day" || viewMode === "fourDay" ? dayKey === todayKey
+    viewMode === "day" ? dayKey === todayKey
     : viewMode === "week" ? startOfWeek(dayKey, weekStartDay) === startOfWeek(todayKey, weekStartDay)
     : startOfMonth(dayKey) === startOfMonth(todayKey);
 
@@ -186,7 +187,7 @@ export default function App() {
     const el = scrollRef.current;
     if (!el || !loaded || view !== "calendar" || viewMode === "month") return;
     const today = dateKeyOf(new Date());
-    const includesToday = viewMode === "day" ? dayKey === today : viewMode === "fourDay" ? fourKeys.includes(today) : weekKeys.includes(today);
+    const includesToday = viewMode === "day" ? dayKey === today : weekKeys.includes(today);
     const hourHeight = VIEW_HOUR_HEIGHT[viewMode];
     if (includesToday) {
       const n = new Date();
@@ -195,7 +196,7 @@ export default function App() {
     } else {
       el.scrollTop = 7 * hourHeight;
     }
-  }, [dayKey, loaded, view, viewMode, weekKeys, fourKeys]);
+  }, [dayKey, loaded, view, viewMode, weekKeys]);
 
   const linked = useMemo(() => linkedPlanIds(events), [events]);
   const dayLayout = useMemo(() => layoutDayWithPlans(events, dayKey, linked, nowLocal), [events, dayKey, linked, nowLocal]);
@@ -208,6 +209,11 @@ export default function App() {
   const labelsByEvent = useMemo(() => nagaraLabelMap(nagara), [nagara]);
   const running = useMemo(() => ongoingSessions(nagara), [nagara]);
   const markerLabels = useMemo(() => markerCandidates(FIXED_MARKERS, markers), [markers]);
+  const nextMarkerLabel = useMemo(() => nextCommuteMarker(markers, todayKey), [markers, todayKey]);
+  const bedtimeInfo = useMemo(
+    () => viewMode === "day" && dayKey === todayKey ? bedtimeSummary(events, settings, todayKey, nowLocal) : null,
+    [dayKey, events, nowLocal, settings, todayKey, viewMode],
+  );
   const sessionLabels = useMemo(() => {
     const busy = new Set(running.map((n) => n.label));
     const recent = nagaraLabelSuggestions(nagara.filter(isSession), "nagara", 4);
@@ -513,7 +519,6 @@ export default function App() {
   const step = (dir: 1 | -1) => {
     setDayKey(
       viewMode === "day" ? addDays(dayKey, dir)
-      : viewMode === "fourDay" ? addDays(dayKey, 4 * dir)
       : viewMode === "week" ? addDays(dayKey, 7 * dir)
       : addMonths(dayKey, dir),
     );
@@ -706,18 +711,16 @@ export default function App() {
 
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const dayHoliday = viewMode === "day" ? holidayName(dayKey) : null;
-  // 4日・週はスマホ幅で終わりの日付が切れるので、始まりの日だけを出す（全体は title に残す）
+  // 週はスマホ幅で終わりの日付が切れるので、始まりの日だけを出す（全体は title に残す）
   const fullRangeLabel =
-    viewMode === "fourDay" ? formatRangeLabel(fourKeys[0], fourKeys[3])
-    : viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay)
+    viewMode === "week" ? formatWeekRangeLabel(dayKey, weekStartDay)
     : null;
   const headLabel =
     viewMode === "day" ? formatDayLabel(dayKey)
-    : viewMode === "fourDay" ? `${formatShortDate(fourKeys[0])}〜`
     : viewMode === "week" ? `${formatShortDate(startOfWeek(dayKey, weekStartDay))}〜`
     : formatMonthLabel(dayKey);
-  const stepName = viewMode === "fourDay" ? "4日間" : VIEW_LABEL[viewMode];
-  const multiDay = viewMode === "week" || viewMode === "fourDay";
+  const stepName = VIEW_LABEL[viewMode];
+  const multiDay = viewMode === "week";
 
   return (
     <div className="app">
@@ -760,6 +763,13 @@ export default function App() {
         onWake={() => void wake()}
         onCancelSleep={cancelSleep}
       />
+
+      {bedtimeInfo && (
+        <div className="bedtime-summary">
+          就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}
+          {bedtimeInfo.plannedMinutes > 0 && <>・予定 {formatDuration(bedtimeInfo.plannedMinutes)}</>}
+        </div>
+      )}
 
       <div className="calendar-swipe-area" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {viewMode === "day" && allDayEvents.length > 0 && (
@@ -841,10 +851,8 @@ export default function App() {
 
       {multiDay && (
         <WeekView
-          density={viewMode === "fourDay" ? "four" : "week"}
-          dayKeys={viewMode === "fourDay" ? fourKeys : weekKeys}
+          dayKeys={weekKeys}
           events={events}
-          nagara={nagara}
           markers={markers}
           labelsByEvent={labelsByEvent}
           linked={linked}
@@ -853,7 +861,6 @@ export default function App() {
           nowMin={nowMin}
           scrollRef={scrollRef}
           onOpenEvent={openEvent}
-          onOpenSession={(n) => setModal({ mode: "session", session: n })}
           onOpenMarker={(m) => setModal({ mode: "marker", marker: m })}
           onCreate={(range) => openNew(range)}
           onOpenDay={openDay}
@@ -871,6 +878,7 @@ export default function App() {
       {quickOpen && (
         <QuickPanel
           markerCandidates={markerLabels}
+          nextMarkerCandidate={nextMarkerLabel}
           sessionCandidates={sessionLabels}
           sleep={activeSleep}
           onMarker={(label) => void addMarker(label)}

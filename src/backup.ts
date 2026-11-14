@@ -222,7 +222,11 @@ export function validateBackup(value: unknown): ValidationResult {
     sourceVersion,
     backup: {
       app: BACKUP_APP_NAME, schemaVersion: 2, exportedAt: value.exportedAt, events: ev.items, nagara, revisions, recurrences, markers,
-      settings: { schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents, startView: migrated.startView, lastItems: migrated.lastItems },
+      settings: {
+        schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents,
+        startView: migrated.startView, weekdayBedtime: migrated.weekdayBedtime, holidayBedtime: migrated.holidayBedtime,
+        lastItems: migrated.lastItems,
+      },
     },
   };
 }
@@ -261,5 +265,13 @@ export function mergeEvents(existing: CalendarEvent[], incoming: CalendarEvent[]
 /** 復元時に保存する設定。v1のバックアップは週の始まり・親カテゴリを持たないので、今の設定を残す */
 export function settingsForRestore(backup: BackupFile, sourceVersion: 1 | 2, current: Settings): Settings {
   if (sourceVersion === 2) return backup.settings;
-  return { ...backup.settings, weekStartDay: current.weekStartDay, categoryParents: current.categoryParents, startView: current.startView, lastItems: current.lastItems };
+  return {
+    ...backup.settings,
+    weekStartDay: current.weekStartDay,
+    categoryParents: current.categoryParents,
+    startView: current.startView,
+    weekdayBedtime: current.weekdayBedtime,
+    holidayBedtime: current.holidayBedtime,
+    lastItems: current.lastItems,
+  };
 }

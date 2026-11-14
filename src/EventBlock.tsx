@@ -25,13 +25,12 @@ export function eventStyle(e: CalendarEvent): React.CSSProperties {
   return { "--c": hex, "--bg": hex, "--fg": textColorOn(hex) } as React.CSSProperties;
 }
 
-/** 表示の密度：day＝日表示、four＝4日表示、week＝週表示 */
-export type BlockDensity = "day" | "four" | "week";
+/** 表示の密度：day＝日表示、week＝週表示 */
+export type BlockDensity = "day" | "week";
 
 /** 1行の高さ（px）と、枠線・余白で使う高さ（px）。CSSの .event.d-* と合わせる */
 const METRICS: Record<BlockDensity, { line: number; chrome: number }> = {
   day: { line: 16, chrome: 6 },
-  four: { line: 13, chrome: 4 },
   week: { line: 11, chrome: 2 },
 };
 

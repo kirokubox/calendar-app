@@ -265,15 +265,6 @@ button { cursor: pointer; }
 .week-events { position: absolute; inset: 0; }
 .event.d-week { padding: 0 2px; border-width: 1px; border-radius: 4px; }
 .event.d-week .event-title { font-size: 0.65rem; }
-/* 4日表示：タイトル・ながら・場所を数行で読める大きさ */
-.event.d-four { padding: 1px 2px; border-width: 1px; border-radius: 4px; }
-.event.d-four .event-title { font-size: 0.68rem; }
-.event.d-four .event-line { font-size: 0.6rem; }
-.week-head.four .week-day-head { font-size: 0.82rem; }
-.week-head.four .week-day-head small { font-size: 0.66rem; }
-.week-lane { position: absolute; top: 0; bottom: 0; right: 0; border-left: 1px dashed var(--line); background: #fafcff; }
-.week-lane .session { font-size: 0.5rem; border-radius: 3px; }
-
 @media (max-width: 400px) {
   :root { --gutter: 38px; }
   .topbar-row { gap: 0; padding: 4px; }
@@ -469,7 +460,15 @@ button { cursor: pointer; }
 .quick.solid { border-style: solid; min-height: 38px; padding: 6px 12px; font-size: 0.9rem; color: var(--text); font-weight: 600; }
 .quick.solid.nagara { border-color: #00897b; }
 .quick.solid.sleep { border-color: #5c6bc0; }
+.quick-next { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 58px; padding: 8px 14px; border: 2px solid var(--accent); border-radius: var(--kb-radius-m); background: var(--kb-accent-soft); color: var(--text); }
+.quick-next small { color: var(--muted); font-size: 0.72rem; }
+.quick-next strong { font-size: 1.05rem; }
 .quick.on { border-style: solid; border-color: var(--accent); background: var(--accent); color: var(--kb-on-accent); font-weight: 700; }
+
+.bedtime-summary { flex: none; padding: 7px 12px; border-bottom: 1px solid var(--line); background: var(--kb-surface-2); color: var(--text); font-size: 0.86rem; text-align: center; }
+.bedtime-settings { display: grid; gap: 8px; max-width: 360px; }
+.bedtime-settings label { display: grid; grid-template-columns: minmax(130px, 1fr) auto; align-items: center; gap: 10px; }
+.bedtime-settings input { padding: 7px 9px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); background: #fff; font: inherit; }
 
 /* 保存後の「取り消す・時刻を直す」 */
 .toast {
