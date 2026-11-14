@@ -40,6 +40,7 @@ import type { PeriodKind } from "./reviewLogic";
 import { formatDuration } from "./reviewLogic";
 import RunningBand from "./RunningBand";
 import SearchView from "./SearchView";
+import WelcomeCard from "./WelcomeCard";
 import type { SearchQuery } from "./searchLogic";
 import SettingsView from "./SettingsView";
 import WeekView from "./WeekView";
@@ -648,6 +649,10 @@ export default function App() {
           onChange={(k, a) => { setReviewKind(k); setReviewAnchor(a); }}
           onBack={() => setView("calendar")}
           onOpenEvent={openEvent}
+          onOpenPerson={(name) => {
+            setSearchQuery({ text: name, field: "people", from: "", to: "", kind: "actual" });
+            setView("search");
+          }}
         />
         {modalEl}
         {toastEl}
@@ -769,6 +774,14 @@ export default function App() {
           就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}
           {bedtimeInfo.plannedMinutes > 0 && <>・予定 {formatDuration(bedtimeInfo.plannedMinutes)}</>}
         </div>
+      )}
+
+      {loaded && events.length === 0 && nagara.length === 0 && markers.length === 0 && (
+        <WelcomeCard
+          onAdd={onPlus}
+          onOpenReview={() => { setReviewAnchor(dayKey); setView("review"); }}
+          onOpenSettings={() => setView("settings")}
+        />
       )}
 
       <div className="calendar-swipe-area" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>

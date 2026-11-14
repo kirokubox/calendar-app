@@ -371,6 +371,7 @@ button { cursor: pointer; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--kb-fs-s); }
 .data-table td:first-child { min-width: 5.5em; }
 .data-table th, .data-table td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }
+.person-link { border: 0; background: none; padding: 0; min-height: 32px; font: inherit; color: var(--accent-dark); font-weight: 600; text-align: left; cursor: pointer; }
 .data-table th { color: var(--muted); font-weight: 600; font-size: var(--kb-fs-xs); white-space: nowrap; }
 .data-table td:not(:first-child), .data-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .data-table tr.child td { color: var(--kb-text-2); font-size: var(--kb-fs-s); }
@@ -545,3 +546,14 @@ button { cursor: pointer; }
 .place-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
 .place-kind { min-height: 32px; padding: 0 12px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-pill); background: #fff; color: var(--kb-text); font: inherit; font-size: 0.85rem; }
 .place-kind.selected { border-color: var(--accent-dark); background: var(--kb-accent-soft); font-weight: 700; }
+
+/* はじめに（記録が1件もないときだけ） */
+.welcome-card { flex: none; margin: var(--kb-space-3); padding: var(--kb-space-3) 0 var(--kb-space-2); border: 1px solid var(--line); border-radius: 12px; background: var(--kb-surface-2); }
+.welcome-title { margin: 0; padding: 0 var(--kb-space-4) var(--kb-space-2); font-size: var(--kb-fs-l); }
+.welcome-steps { list-style: none; margin: 0; padding: 0; }
+.welcome-row { display: flex; align-items: center; gap: var(--kb-space-2); width: 100%; min-height: 44px; padding: 6px var(--kb-space-4); border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; font-size: var(--kb-fs-s); text-align: left; }
+button.welcome-row { cursor: pointer; }
+.welcome-no { flex: none; width: 1.5em; color: var(--accent-dark); font-weight: 700; }
+.welcome-text { flex: 1; min-width: 0; }
+.welcome-note { margin: 0; padding: var(--kb-space-2) var(--kb-space-4) 0; border-top: 1px solid var(--line); font-size: var(--kb-fs-xs); color: var(--muted); line-height: 1.7; }
+.welcome-note .text-btn { display: inline-flex; align-items: center; min-height: 32px; margin-left: 4px; padding: 0 6px; border: 0; background: none; font-size: inherit; }

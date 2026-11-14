@@ -3,6 +3,7 @@ import { COLOR_KEYS, PARENT_CATEGORIES, PARENT_COLORS } from "./constants";
 import { formatShortDate } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
 import { Icon } from "./Icon";
+import { peopleInPeriod } from "./peopleLogic";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import {
   DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
@@ -21,12 +22,14 @@ interface Props {
   onChange: (kind: PeriodKind, anchor: string) => void;
   onBack: () => void;
   onOpenEvent: (event: CalendarEvent) => void;
+  /** 人の名前を押したとき：その人との記録を検索画面で開く */
+  onOpenPerson: (name: string) => void;
 }
 
 const KIND_LABEL: Record<PeriodKind, string> = { week: "週", month: "月" };
 
 /** 振り返り画面：時間構成（円グラフ）・前期間との差・棒グラフ・ながら/場所・未確定の予定 */
-export default function ReviewView({ events, nagara, settings, nowLocal, kind, anchor, onChange, onBack, onOpenEvent }: Props) {
+export default function ReviewView({ events, nagara, settings, nowLocal, kind, anchor, onChange, onBack, onOpenEvent, onOpenPerson }: Props) {
   const [drill, setDrill] = useState<ParentCategory | null>(null);
   const [target, setTarget] = useState<BarTarget>(DEFAULT_BAR_TARGET);
 
@@ -45,6 +48,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
       .map((n) => ({ key: n.label, label: n.label, minutes: d.byNagara[n.label] ?? 0, color: detailColor(`nagara:${n.label}`) }))
       .filter((s) => s.minutes > 0),
   })), [stats]);
+  const people = useMemo(() => peopleInPeriod(events, period, cutoff, nowLocal), [events, period, cutoff, nowLocal]);
   const unconfirmed = useMemo(() => unconfirmedInPeriod(events, period, nowLocal), [events, period, nowLocal]);
 
   const total = breakdown.totalMinutes;
@@ -259,6 +263,28 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
                       <td>{p.label}</td>
                       <td>{formatDuration(p.minutes)}（{formatPercent(p.minutes, total)}）</td>
                       <td>{p.sharedMinutes > 0 ? formatDuration(p.sharedMinutes) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h2>人</h2>
+          <p className="hint">実績のうち、人を入れた記録を人ごとにまとめます。2人以上いる記録は、それぞれの人に同じ時間が入ります（足し合わせると実際より長くなります）。最後に会った日は、期間に関係なく今日までの記録から出します。名前を押すと、その人との記録を検索で開きます。</p>
+          {people.length === 0 ? <p className="hint">この期間に、人を入れた実績はありません。</p> : (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>人</th><th>時間</th><th>日数（件数）</th><th>最後に会った日</th></tr></thead>
+                <tbody>
+                  {people.map((p) => (
+                    <tr key={p.name}>
+                      <td><button type="button" className="person-link" onClick={() => onOpenPerson(p.name)}>{p.name}</button></td>
+                      <td>{formatDuration(p.minutes)}</td>
+                      <td>{p.days}日（{p.count}件）</td>
+                      <td>{p.lastDate ? formatShortDate(p.lastDate) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
