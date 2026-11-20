@@ -1,6 +1,6 @@
 // 予定と実績の純粋ロジック（リンク判定・未確定判定・予定通りの複製・変更履歴）。繰り返しは recurrence.ts。
 import { addMinutes, datePart, diffMinutes, localFromMinutes, roundTo, timePart, timeToMinutes } from "./dateUtils.js";
-import { clipRangeToDay, clipToDay, layoutColumns, type DaySegment, type PlacedSegment } from "./layout.js";
+import { clipRangeToDay, clipToDay, layoutColumns, segmentsForDay, type DaySegment, type PlacedSegment } from "./layout.js";
 import { eventDefaults } from "./migrate.js";
 import type { CalendarEvent, Nagara, PlanRevision, PlanSnapshot } from "./types.js";
 
@@ -21,8 +21,8 @@ export function isUnconfirmed(event: CalendarEvent, linked: Set<string>, now: st
   return event.kind === "plan" && event.status === "active" && event.end < now && !linked.has(event.id);
 }
 
-/** 表示の区分：linked＝背面に薄い枠線／cancelled＝背面に取り消し線／normal＝通常（列分割に参加） */
-export type PlanVariant = "normal" | "linked" | "cancelled";
+/** 表示の区分：linked＝背面に薄い枠線／cancelled＝背面に取り消し線／unconfirmed＝実績と重なる未確定の予定を背面に（v0.10.0）／normal＝通常（列分割に参加） */
+export type PlanVariant = "normal" | "linked" | "cancelled" | "unconfirmed";
 
 export function planVariant(event: CalendarEvent, linked: Set<string>): PlanVariant {
   if (event.kind !== "plan") return "normal";
@@ -67,17 +67,25 @@ export function remainingPlanRanges(plan: CalendarEvent, events: CalendarEvent[]
 export interface PlacedBackground {
   seg: DaySegment;
   variant: PlanVariant;
+  /** 手前の実績と時間が重なっている（v0.10.0）。重なっている背面の予定は文字を出さず、枠だけにする */
+  covered: boolean;
+}
+
+/** 実績（予定以外）のうち、その区間と5分を超えて重なるものがあるか */
+function overlapsActual(seg: DaySegment, actualSegs: DaySegment[]): boolean {
+  return actualSegs.some((a) => Math.min(a.endMin, seg.endMin) - Math.max(a.startMin, seg.startMin) > 5);
 }
 
 /** その日の表示用の切り分け：終了したリンク済み予定とキャンセル予定は背面へ、未終了の残りだけ前面へ分ける */
 export function layoutDayWithPlans(events: CalendarEvent[], dayKey: string, linked: Set<string>, now = `${dayKey}T23:59`): { front: PlacedSegment[]; back: PlacedBackground[] } {
   const frontSegs: DaySegment[] = [];
   const back: PlacedBackground[] = [];
+  const actualSegs = segmentsForDay(events.filter((e) => e.kind !== "plan" && e.status !== "cancelled"), dayKey);
   for (const e of events) {
     if (e.kind === "plan" && e.status !== "cancelled" && linked.has(e.id)) {
       if (e.end < now) {
         const seg = clipToDay(e, dayKey);
-        if (seg) back.push({ seg, variant: "linked" });
+        if (seg) back.push({ seg, variant: "linked", covered: true });
         continue;
       }
       for (const range of remainingPlanRanges(e, events)) {
@@ -89,8 +97,12 @@ export function layoutDayWithPlans(events: CalendarEvent[], dayKey: string, link
     const seg = clipToDay(e, dayKey);
     if (!seg) continue;
     const variant = planVariant(e, linked);
-    if (variant === "normal") frontSegs.push(seg);
-    else back.push({ seg, variant });
+    // 過ぎたのに実績がひも付いていない予定（未確定）でも、その時間に別の実績があるなら、
+    // 実績を主役にして予定は背面へ（v0.10.0。以前は列を分けて実績が半分の幅になっていた）
+    if (variant === "normal" && isUnconfirmed(e, linked, now) && overlapsActual(seg, actualSegs)) {
+      back.push({ seg, variant: "unconfirmed", covered: true });
+    } else if (variant === "normal") frontSegs.push(seg);
+    else back.push({ seg, variant, covered: overlapsActual(seg, actualSegs) });
   }
   return { front: layoutColumns(frontSegs), back };
 }

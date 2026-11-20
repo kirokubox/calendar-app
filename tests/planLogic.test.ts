@@ -210,3 +210,31 @@ test("この予定の続きを記録：開始＝この予定から作った実�
   // 現在が開始より前なら開始+60分
   assert.deepEqual(continueRange([a1, a2], plan, "2026-10-14T17:20"), { start: "2026-10-14T17:30", end: "2026-10-14T18:30" });
 });
+
+test("日の切り分け（v0.10.0）：実績と重なる未確定の予定は背面、重ならない未確定は前面のまま", () => {
+  const events = [
+    ev("u1", "会議", "2026-11-18T13:00", "2026-11-18T15:00"),
+    ev("a1", "仕事", "2026-11-18T13:20", "2026-11-18T16:40", { kind: "actual" }),
+    ev("u2", "散歩", "2026-11-18T20:00", "2026-11-18T21:00"),
+    ev("c1", "ジム", "2026-11-18T17:00", "2026-11-18T18:00", { status: "cancelled" }),
+    ev("c2", "読書", "2026-11-18T22:00", "2026-11-18T23:00", { status: "cancelled" }),
+    ev("a2", "カフェ", "2026-11-18T16:40", "2026-11-18T17:30", { kind: "actual" }),
+  ];
+  const { front, back } = layoutDayWithPlans(events, "2026-11-18", linkedPlanIds(events), "2026-11-19T00:00");
+  assert.deepEqual(front.map((s) => s.event.id).sort(), ["a1", "a2", "u2"]);
+  assert.ok(front.filter((s) => s.event.id === "a1").every((s) => s.cols === 1), "未確定の予定で実績が半分の幅にならない");
+  assert.deepEqual(back.map((b) => [b.seg.event.id, b.variant, b.covered]), [
+    ["u1", "unconfirmed", true],
+    ["c1", "cancelled", true],
+    ["c2", "cancelled", false],
+  ]);
+});
+
+test("日の切り分け（v0.10.0）：まだ終わっていない予定は、実績と重なっても前面のまま", () => {
+  const events = [
+    ev("p1", "会議", "2026-11-18T13:00", "2026-11-18T15:00"),
+    ev("a1", "仕事", "2026-11-18T13:20", "2026-11-18T14:00", { kind: "actual" }),
+  ];
+  const { front } = layoutDayWithPlans(events, "2026-11-18", linkedPlanIds(events), "2026-11-18T14:00");
+  assert.deepEqual(front.map((s) => s.event.id).sort(), ["a1", "p1"]);
+});

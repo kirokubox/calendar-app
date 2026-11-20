@@ -96,7 +96,7 @@ export default function WeekView({
             {columns.map((c) => (
               <div key={c.key} className={`week-col ${c.key === todayKey ? "today" : ""}`} onClick={(ev) => onColumnClick(c.key, ev)}>
                 <div className="week-events">
-                  {c.layout.back.map(({ seg, variant }) => (
+                  {c.layout.back.map(({ seg, variant, covered }) => (
                     <EventBlock
                       key={`${seg.event.id}-${c.key}`}
                       seg={{ ...seg, col: 0, cols: 1 }}
@@ -104,6 +104,7 @@ export default function WeekView({
                       density="week"
                       hourHeight={hourHeight}
                       variant={variant}
+                      covered={covered}
                       nagaraLabels={[]}
                       onOpen={() => onOpenEvent(seg.event)}
                     />

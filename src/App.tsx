@@ -810,12 +810,13 @@ export default function App() {
               onClick={onAreaClick}
               style={{ backgroundSize: `100% ${HOUR_HEIGHT}px`, right: LANE_WIDTH }}
             >
-              {dayLayout.back.map(({ seg, variant }) => (
+              {dayLayout.back.map(({ seg, variant, covered }) => (
                 <EventBlock
                   key={`${seg.event.id}-${dayKey}`}
                   seg={{ ...seg, col: 0, cols: 1 }}
                   dayKey={dayKey}
                   variant={variant}
+                  covered={covered}
                   nagaraLabels={[]}
                   onOpen={() => openEvent(seg.event)}
                 />

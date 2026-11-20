@@ -3,6 +3,7 @@ import { backupFileName, buildBackup, summarizeBackup, validateBackup, type Back
 import { APP_VERSION, COLOR_HEX, COLOR_IDS, PARENT_CATEGORIES } from "./constants";
 import { dateKeyOf, isDateKey, parseDateKey, timePart, toLocal, weekdayName } from "./dateUtils";
 import AiMarkdownSettings from "./AiMarkdownSettings";
+import IcsExportSettings from "./IcsExportSettings";
 import GoogleImportSettings from "./GoogleImportSettings";
 import { Icon } from "./Icon";
 import LastItemsSettings from "./LastItemsSettings";
@@ -307,6 +308,8 @@ export default function SettingsView({
         />
 
         <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} markers={markers} activeSleep={activeSleep} />
+
+        <IcsExportSettings events={events} />
 
         <GoogleImportSettings events={events} onImport={onImportGoogle} />
 

@@ -315,6 +315,8 @@ button { cursor: pointer; }
 .event.back.cancelled { border-color: var(--c); opacity: 0.45; justify-content: flex-end; }
 .event.back.cancelled .event-title, .event.back.cancelled .event-time { text-decoration: line-through; }
 .event.back .event-title { font-weight: 500; }
+/* 実績と重なる未確定の予定（v0.10.0）：実績の幅は削らず、右端の細い縦の印（未確定バッジと同じ黄色）を前に出す */
+.event.back.unconfirmed { z-index: 2; padding: 0; border: 1px dashed #d9a53c; background: repeating-linear-gradient(45deg, #fff3cd 0 4px, #fde8ad 4px 8px); opacity: 1; }
 .badge-unconfirmed {
   display: inline-block; margin-right: 3px; padding: 0 4px; border-radius: 4px; background: #fff3cd; color: #8a5a00; border: 1px solid #f0c36d;
   font-size: 0.6rem; font-weight: 700; vertical-align: baseline;
@@ -557,3 +559,7 @@ button.welcome-row { cursor: pointer; }
 .welcome-text { flex: 1; min-width: 0; }
 .welcome-note { margin: 0; padding: var(--kb-space-2) var(--kb-space-4) 0; border-top: 1px solid var(--line); font-size: var(--kb-fs-xs); color: var(--muted); line-height: 1.7; }
 .welcome-note .text-btn { display: inline-flex; align-items: center; min-height: 32px; margin-left: 4px; padding: 0 6px; border: 0; background: none; font-size: inherit; }
+
+/* ほかのカレンダー用の書き出し（v0.10.0）：開始日・終了日 */
+.field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: var(--kb-fs-s); color: var(--kb-text-2); }
+.field-inline input[type="date"] { padding: 6px 8px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); background: #fff; font: inherit; color: var(--kb-text); }

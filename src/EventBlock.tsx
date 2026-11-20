@@ -46,10 +46,12 @@ interface Props {
   variant?: PlanVariant;
   /** 過ぎたのに実績がない予定 */
   unconfirmed?: boolean;
+  /** 背面の予定が手前の実績と重なっている（v0.10.0）。文字を出さず枠だけにする */
+  covered?: boolean;
   onOpen: () => void;
 }
 
-export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day", hourHeight = HOUR_HEIGHT, variant = "normal", unconfirmed, onOpen }: Props) {
+export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day", hourHeight = HOUR_HEIGHT, variant = "normal", unconfirmed, covered = false, onOpen }: Props) {
   const e = seg.event;
   const metrics = METRICS[density];
   const top = (seg.startMin / 60) * hourHeight;
@@ -73,15 +75,17 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day",
     { time: density === "day" },
   );
   const title = lines.peopleLine ? e.title : displayTitle(e);
+  // 実績と重なる未確定の予定（v0.10.0）は、実績の幅を削らず、右端の細い印として前に出す（押すと予定を開いて確定できる）
+  const strip = variant === "unconfirmed";
   const style = {
     ...eventStyle(e),
     top,
     height,
-    left: `calc(${(seg.col / seg.cols) * 100}% + 1px)`,
-    width: `calc(${100 / seg.cols}% - 3px)`,
+    left: strip ? "calc(100% - 12px)" : `calc(${(seg.col / seg.cols) * 100}% + 1px)`,
+    width: strip ? "10px" : `calc(${100 / seg.cols}% - 3px)`,
     "--lh": `${metrics.line}px`,
   } as React.CSSProperties;
-  const label = `${displayTitle(e)}${plus ? ` ${plus}` : ""}${placeText ? ` 場所：${placeText}` : ""} ${timeLabel}${fromPlan ? "（もとは予定）" : ""}`;
+  const label = `${strip ? "未確定の予定：" : ""}${displayTitle(e)}${plus ? ` ${plus}` : ""}${placeText ? ` 場所：${placeText}` : ""} ${timeLabel}${fromPlan ? "（もとは予定）" : ""}`;
 
   return (
     <button
@@ -93,7 +97,9 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day",
       aria-label={label}
     >
       {/* 実績がある予定の背面は枠だけにして、手前の実績の文字と重ならないようにする */}
-      {variant !== "linked" && (
+      {/* 手前の実績と重なるキャンセル予定も、文字が実績の下からはみ出さないよう枠だけ（v0.10.0）。
+          未確定の予定は右端の細い印だけ（文字なし） */}
+      {variant !== "linked" && variant !== "unconfirmed" && !(back && covered) && (
         <>
           {lines.peopleLine && <span className="event-line event-people">{people.join("・")}</span>}
           <span className="event-title" style={{ WebkitLineClamp: back ? 1 : lines.titleLines }}>
