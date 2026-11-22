@@ -569,3 +569,7 @@ button.welcome-row { cursor: pointer; }
 /* ほかのカレンダー用の書き出し（v0.10.0）：開始日・終了日 */
 .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: var(--kb-fs-s); color: var(--kb-text-2); }
 .field-inline input[type="date"] { padding: 6px 8px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); background: #fff; font: inherit; color: var(--kb-text); }
+.year-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; height: 135px; }
+.year-month { min-width: 0; border: 0; background: transparent; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: inherit; cursor: pointer; }
+.year-month-bar { width: 100%; height: 110px; display: flex; flex-direction: column-reverse; overflow: hidden; border-radius: 2px; background: #f2f2f2; }
+.year-month-bar i { display: block; width: 100%; flex: none; }

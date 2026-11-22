@@ -6,7 +6,7 @@ import {
   overlapsPeriod, parentOf, periodDays, periodLabel, planChangesInPeriod, shiftPeriod, unconfirmedInPeriod, upcomingInPeriod, type Period,
 } from "./reviewLogic.js";
 import { displayTitle, titleTokens } from "./eventLogic.js";
-import { markerTimeLabel, markersInRange, markersWithGaps } from "./markerLogic.js";
+import { markerTimeLabel, markersInRange, markersWithGaps, travelPairSummaries } from "./markerLogic.js";
 import { isOngoing, ongoingSessions, sessionInterval, sessionLabelsOverlapping } from "./nagaraLogic.js";
 import { planLabel } from "./planLogic.js";
 import type { ActiveSleep, CalendarEvent, Marker, Nagara, PlanRevision, Settings } from "./types.js";
@@ -248,7 +248,7 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
 
   // 6. マーカー
   out.push("## 6. マーカー（時刻だけの記録）", "");
-  out.push("隣り合う2つのマーカーの間の時間を出す（24時間を超えて離れたものはつなげない）。どの組み合わせが移動かは決めていない。", "");
+  out.push("隣り合う2つのマーカーの間の時間を出す（24時間を超えて離れたものはつなげない）。対応する組の移動時間は下表に別集計する。", "");
   const gaps = markersWithGaps(markers).filter((g) => g.marker.at >= `${period.start}T00:00` && g.marker.at < `${period.end}T00:00`);
   out.push(
     ...(gaps.length > 0
@@ -263,5 +263,9 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
       : ["（なし）"]),
     "",
   );
+  out.push("### 移動（マーカーの組）", "");
+  out.push(...table(["組", "回数", "合計", "平均", "最短", "最長"], travelPairSummaries(markers, period.start, period.end).map((r) => [
+    r.name, String(r.count), formatDuration(r.total), formatDuration(r.average), formatDuration(r.shortest), formatDuration(r.longest),
+  ])), "");
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }

@@ -3,18 +3,21 @@ import { COLOR_KEYS, PARENT_CATEGORIES, PARENT_COLORS } from "./constants";
 import { formatShortDate } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
 import { Icon } from "./Icon";
+import { travelPairSummaries } from "./markerLogic";
 import { peopleInPeriod } from "./peopleLogic";
+import { monthlyTrend, yearMonths, yearlyLastItems } from "./yearLogic";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import {
   DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
   detailColor, equivalentPreviousCutoff, formatSigned, parseBarTarget, parentOf, periodCutoff, periodLabel, periodOf, shiftPeriod, stackedBarSeries,
   unconfirmedInPeriod, type BarTarget, type PeriodKind,
 } from "./reviewLogic";
-import type { CalendarEvent, Nagara, ParentCategory, Settings } from "./types";
+import type { CalendarEvent, Marker, Nagara, ParentCategory, Settings } from "./types";
 
 interface Props {
   events: CalendarEvent[];
   nagara: Nagara[];
+  markers: Marker[];
   settings: Settings;
   nowLocal: string;
   kind: PeriodKind;
@@ -26,12 +29,13 @@ interface Props {
   onOpenPerson: (name: string) => void;
 }
 
-const KIND_LABEL: Record<PeriodKind, string> = { week: "週", month: "月" };
+const KIND_LABEL: Record<PeriodKind, string> = { week: "週", month: "月", year: "年" };
 
 /** 振り返り画面：時間構成（円グラフ）・前期間との差・棒グラフ・ながら/場所・未確定の予定 */
-export default function ReviewView({ events, nagara, settings, nowLocal, kind, anchor, onChange, onBack, onOpenEvent, onOpenPerson }: Props) {
+export default function ReviewView({ events, nagara, markers, settings, nowLocal, kind, anchor, onChange, onBack, onOpenEvent, onOpenPerson }: Props) {
   const [drill, setDrill] = useState<ParentCategory | null>(null);
   const [target, setTarget] = useState<BarTarget>(DEFAULT_BAR_TARGET);
+  const [openTravel, setOpenTravel] = useState<string | null>(null);
 
   const period = useMemo(() => periodOf(kind, anchor, settings.weekStartDay), [kind, anchor, settings.weekStartDay]);
   const prevPeriod = useMemo(() => shiftPeriod(period, -1), [period]);
@@ -42,6 +46,10 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
   const breakdown = useMemo(() => buildBreakdown(stats, settings), [stats, settings]);
   const diffRows = useMemo(() => buildDiffRows(stats, prevStats, settings), [stats, prevStats, settings]);
   const stackedBars = useMemo(() => stackedBarSeries(stats, target, settings), [stats, target, settings]);
+  const trendBars = useMemo(() => kind === "year" ? monthlyTrend(stackedBars) : stackedBars, [kind, stackedBars]);
+  const months = useMemo(() => kind === "year" ? yearMonths(stats, settings) : [], [kind, stats, settings]);
+  const lastYear = useMemo(() => kind === "year" ? yearlyLastItems(settings.lastItems, events, nagara, markers, settings, period.start, period.end, nowLocal) : [], [kind, settings, events, nagara, markers, period, nowLocal]);
+  const travel = useMemo(() => travelPairSummaries(markers, period.start, period.end), [markers, period]);
   const nagaraBars = useMemo(() => stats.perDay.map((d) => ({
     date: d.date,
     segments: stats.nagaraTotals
@@ -77,7 +85,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
         </div>
         <div className="review-nav">
           <div className="segmented" role="group" aria-label="期間の単位">
-            {(["week", "month"] as PeriodKind[]).map((k) => (
+            {(["week", "month", "year"] as PeriodKind[]).map((k) => (
               <button key={k} type="button" className={kind === k ? "on" : ""} aria-pressed={kind === k} onClick={() => { setDrill(null); onChange(k, anchor); }}>
                 {KIND_LABEL[k]}
               </button>
@@ -91,6 +99,25 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
       </header>
 
       <div className="settings-body review-body">
+        {kind === "year" && <section>
+          <h2>12か月の時間構成</h2>
+          <div className="year-months">
+            {months.map((m) => <button type="button" key={m.month} className="year-month" onClick={() => onChange("month", `${m.month}-01`)} aria-label={`${Number(m.month.slice(5))}月の振り返りへ`}>
+              <span className="year-month-bar">{[...PARENT_CATEGORIES, "未記録" as const].map((name) => {
+                const minutes = name === "未記録" ? m.unrecorded : m.parents[name];
+                return <i key={name} title={`${name} ${formatDuration(minutes)}`} style={{ height: `${m.total ? minutes / m.total * 100 : 0}%`, background: PARENT_COLORS[name] }} />;
+              })}</span>
+              <span>{Number(m.month.slice(5))}月</span>
+            </button>)}
+          </div>
+          <p className="hint">月を押すと、その月の振り返りを開きます。未来の月には時間を入れません。</p>
+        </section>}
+        {kind === "year" && <section>
+          <h2>前回の一覧：今年の回数</h2>
+          {lastYear.length === 0 ? <p className="hint">項目は設定の「前回の一覧」で登録できます。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>項目</th><th>日数</th><th>最後の日</th></tr></thead><tbody>
+            {lastYear.map((r) => <tr key={r.item.id}><td>{r.item.name}</td><td>{r.count}日</td><td>{r.last ? formatShortDate(r.last) : "—"}</td></tr>)}
+          </tbody></table></div>}
+        </section>}
         <section>
           <h2>時間構成{drilled ? `：${drilled.name}` : ""}</h2>
           {drilled && (
@@ -157,7 +184,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
         </section>
 
         <section>
-          <h2>日ごとの推移</h2>
+          <h2>{kind === "year" ? "月ごとの推移" : "日ごとの推移"}</h2>
           <div className="inline-actions">
             <select
               aria-label="棒グラフの対象"
@@ -173,9 +200,9 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
               <option value="people">人がいる時間</option>
             </select>
           </div>
-          <StackedBarChart days={stackedBars} />
+          <StackedBarChart days={trendBars} monthly={kind === "year"} />
           <div className="stack-legend">
-            {[...new Map(stackedBars.flatMap((d) => d.segments).map((s) => [s.key, s])).values()].map((s) => (
+            {[...new Map(trendBars.flatMap((d) => d.segments).map((s) => [s.key, s])).values()].map((s) => (
               <span key={s.key}><i style={{ background: s.color }} />{s.label}</span>
             ))}
           </div>
@@ -194,7 +221,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
           )}
           {stats.nagaraTotals.length > 0 && (
             <div className="nagara-trend">
-              <StackedBarChart days={nagaraBars} />
+              <StackedBarChart days={kind === "year" ? monthlyTrend(nagaraBars) : nagaraBars} monthly={kind === "year"} />
               <div className="stack-legend">
                 {stats.nagaraTotals.map((n) => (
                   <span key={n.label}><i style={{ background: detailColor(`nagara:${n.label}`) }} />{n.label}</span>
@@ -269,6 +296,17 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
               </table>
             </div>
           )}
+        </section>
+
+        <section>
+          <h2>移動（マーカーの組）</h2>
+          <p className="hint">対応する始まりと終わりが6時間以内のときだけ数えます。時間構成には含めません。</p>
+          <div className="table-scroll"><table className="data-table"><thead><tr><th>組</th><th>回数</th><th>合計</th><th>平均</th><th>最短</th><th>最長</th></tr></thead><tbody>
+            {travel.map((r) => <tr key={r.key}><td><button type="button" className="person-link" onClick={() => setOpenTravel(openTravel === r.key ? null : r.key)}>{r.name}</button></td><td>{r.count}</td><td>{formatDuration(r.total)}</td><td>{formatDuration(r.average)}</td><td>{formatDuration(r.shortest)}</td><td>{formatDuration(r.longest)}</td></tr>)}
+          </tbody></table></div>
+          {travel.filter((r) => r.key === openTravel).map((r) => <div key={r.key} className="table-scroll"><h3>{r.name}：日ごとの一覧</h3><table className="data-table"><thead><tr><th>日付</th><th>時刻</th><th>かかった時間</th></tr></thead><tbody>
+            {r.rows.map((p) => <tr key={p.start.id}><td>{formatShortDate(p.start.at.slice(0, 10))}</td><td>{p.start.at.slice(11)}〜{p.end.at.slice(11)}</td><td>{formatDuration(p.minutes)}</td></tr>)}
+          </tbody></table></div>)}
         </section>
 
         <section>

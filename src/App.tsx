@@ -645,6 +645,7 @@ export default function App() {
         <ReviewView
           events={events}
           nagara={nagara}
+          markers={markers}
           settings={settings}
           nowLocal={nowLocal}
           kind={reviewKind}

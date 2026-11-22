@@ -5,6 +5,51 @@ import type { Marker } from "./types.js";
 
 export const COMMUTE_MARKERS = ["家を出た", "会社着", "会社発", "帰宅"] as const;
 
+export const TRAVEL_PAIRS = [
+  { key: "toWork", name: "行きの通勤", start: "家を出た", end: "会社着" },
+  { key: "fromWork", name: "帰りの通勤", start: "会社発", end: "帰宅" },
+  { key: "outward", name: "外出の行き", start: "家を出た", end: "目的地着" },
+  { key: "return", name: "外出の帰り", start: "目的地発", end: "帰宅" },
+] as const;
+
+export interface TravelPair { key: typeof TRAVEL_PAIRS[number]["key"]; name: string; start: Marker; end: Marker; minutes: number }
+
+/** 始まりを直近のものに更新し、対応する最初の終わりだけを組にする。 */
+export function pairTravelMarkers(markers: Marker[]): TravelPair[] {
+  const pending = new Map<TravelPair["key"], Marker>();
+  const result: TravelPair[] = [];
+  for (const marker of sortMarkers(markers)) {
+    if (TRAVEL_PAIRS.some((pair) => pair.start === marker.label)) pending.clear();
+    for (const pair of TRAVEL_PAIRS) {
+      if (marker.label === pair.start) pending.set(pair.key, marker);
+      else if (marker.label === pair.end) {
+        const start = pending.get(pair.key);
+        pending.delete(pair.key);
+        if (!start) continue;
+        const minutes = diffMinutes(start.at, marker.at);
+        const sameDay = datePart(start.at) === datePart(marker.at);
+        const nextMorning = datePart(marker.at) === addDays(datePart(start.at), 1) && marker.at.slice(11) < "05:00";
+        if (minutes >= 0 && minutes <= 360 && (sameDay || nextMorning)) {
+          result.push({ key: pair.key, name: pair.name, start, end: marker, minutes });
+          for (const [key, other] of pending) if (other.id === start.id) pending.delete(key);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+export function travelPairSummaries(markers: Marker[], from: string, to: string) {
+  const pairs = pairTravelMarkers(markers).filter((p) => p.start.at >= `${from}T00:00` && p.start.at < `${to}T00:00`);
+  return TRAVEL_PAIRS.map((def) => {
+    const rows = pairs.filter((p) => p.key === def.key);
+    const total = rows.reduce((sum, p) => sum + p.minutes, 0);
+    return { ...def, rows, count: rows.length, total, average: rows.length ? total / rows.length : 0,
+      shortest: rows.length ? Math.min(...rows.map((p) => p.minutes)) : 0,
+      longest: rows.length ? Math.max(...rows.map((p) => p.minutes)) : 0 };
+  });
+}
+
 /** 直前のマーカーからの経過時間を出す上限（これより離れていたら、つながりとして扱わない） */
 export const MARKER_GAP_LIMIT_MINUTES = 24 * 60;
 

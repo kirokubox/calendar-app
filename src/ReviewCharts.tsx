@@ -110,14 +110,14 @@ export function BarChart({ bars, color }: BarProps) {
 }
 
 /** 区分別の積み上げ棒グラフ。 */
-export function StackedBarChart({ days }: { days: StackedDay[] }) {
+export function StackedBarChart({ days, monthly = false }: { days: StackedDay[]; monthly?: boolean }) {
   const totals = days.map((d) => d.segments.reduce((sum, s) => sum + s.minutes, 0));
   const max = Math.max(60, ...totals);
   const slot = (W - PAD_L) / Math.max(1, days.length);
   const plotH = H - PAD_B - PAD_T;
-  const labelEvery = days.length > 10 ? 5 : 1;
+  const labelEvery = monthly ? 1 : days.length > 10 ? 5 : 1;
   return (
-    <svg className="bars" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="日ごとの積み上げ棒グラフ">
+    <svg className="bars" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${monthly ? "月" : "日"}ごとの積み上げ棒グラフ`}>
       <line x1={PAD_L} x2={W} y1={H - PAD_B} y2={H - PAD_B} stroke="#cfd8dc" />
       <text x={PAD_L} y={10} fontSize={8} fill="#6b7280">{`最大 ${formatDuration(max)}`}</text>
       {days.map((day, i) => {
@@ -136,7 +136,7 @@ export function StackedBarChart({ days }: { days: StackedDay[] }) {
                 </rect>
               );
             })}
-            {i % labelEvery === 0 && <text x={x + w / 2} y={H - 5} fontSize={8} textAnchor="middle" fill="#6b7280">{Number(day.date.slice(8, 10))}</text>}
+            {i % labelEvery === 0 && <text x={x + w / 2} y={H - 5} fontSize={8} textAnchor="middle" fill="#6b7280">{Number(day.date.slice(monthly ? 5 : 8, monthly ? 7 : 10))}</text>}
           </g>
         );
       })}

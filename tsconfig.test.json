@@ -24,6 +24,7 @@
     "src/planLogic.ts",
     "src/icsExport.ts",
     "src/reviewLogic.ts",
+    "src/yearLogic.ts",
     "src/reviewMarkdown.ts",
     "src/googleImport.ts",
     "src/holidays.ts",
@@ -54,6 +55,7 @@
     "tests/reviewMarkdown.test.ts",
     "tests/googleImport.test.ts",
     "tests/holidays.test.ts",
-    "tests/recurrence.test.ts"
+    "tests/recurrence.test.ts",
+    "tests/yearAndTravel.test.ts"
   ]
 }
