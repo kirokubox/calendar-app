@@ -5,7 +5,7 @@ import { displayTitle } from "./eventLogic";
 import { Icon } from "./Icon";
 import { travelPairSummaries } from "./markerLogic";
 import { peopleInPeriod } from "./peopleLogic";
-import { monthlyTrend, yearMonths, yearlyLastItems } from "./yearLogic";
+import { monthlyTrend, yearMonths, yearPeople, yearPlaces } from "./yearLogic";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import {
   DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
@@ -36,6 +36,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
   const [drill, setDrill] = useState<ParentCategory | null>(null);
   const [target, setTarget] = useState<BarTarget>(DEFAULT_BAR_TARGET);
   const [openTravel, setOpenTravel] = useState<string | null>(null);
+  const [includeRoutine, setIncludeRoutine] = useState(false);
 
   const period = useMemo(() => periodOf(kind, anchor, settings.weekStartDay), [kind, anchor, settings.weekStartDay]);
   const prevPeriod = useMemo(() => shiftPeriod(period, -1), [period]);
@@ -48,7 +49,8 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
   const stackedBars = useMemo(() => stackedBarSeries(stats, target, settings), [stats, target, settings]);
   const trendBars = useMemo(() => kind === "year" ? monthlyTrend(stackedBars) : stackedBars, [kind, stackedBars]);
   const months = useMemo(() => kind === "year" ? yearMonths(stats, settings) : [], [kind, stats, settings]);
-  const lastYear = useMemo(() => kind === "year" ? yearlyLastItems(settings.lastItems, events, nagara, markers, settings, period.start, period.end, nowLocal) : [], [kind, settings, events, nagara, markers, period, nowLocal]);
+  const topPeople = useMemo(() => kind === "year" ? yearPeople(events, period, cutoff, nowLocal, includeRoutine, settings) : [], [kind, events, period, cutoff, nowLocal, includeRoutine, settings]);
+  const topPlaces = useMemo(() => kind === "year" ? yearPlaces(stats, events, nagara, period, cutoff, includeRoutine) : [], [kind, stats, events, nagara, period, cutoff, includeRoutine]);
   const travel = useMemo(() => travelPairSummaries(markers, period.start, period.end), [markers, period]);
   const nagaraBars = useMemo(() => stats.perDay.map((d) => ({
     date: d.date,
@@ -113,9 +115,15 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           <p className="hint">月を押すと、その月の振り返りを開きます。未来の月には時間を入れません。</p>
         </section>}
         {kind === "year" && <section>
-          <h2>前回の一覧：今年の回数</h2>
-          {lastYear.length === 0 ? <p className="hint">項目は設定の「前回の一覧」で登録できます。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>項目</th><th>日数</th><th>最後の日</th></tr></thead><tbody>
-            {lastYear.map((r) => <tr key={r.item.id}><td>{r.item.name}</td><td>{r.count}日</td><td>{r.last ? formatShortDate(r.last) : "—"}</td></tr>)}
+          <h2>今年いちばん長く一緒にいた人・場所</h2>
+          <label className="year-routine-toggle"><input type="checkbox" checked={includeRoutine} onChange={(e) => setIncludeRoutine(e.target.checked)} />仕事・家・職場・移動も含める</label>
+          <h3>人の上位10件</h3>
+          {topPeople.length === 0 ? <p className="hint">この条件の記録はありません。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>人</th><th>時間</th><th>日数</th></tr></thead><tbody>
+            {topPeople.map((r) => <tr key={r.name}><td>{r.name}</td><td>{formatDuration(r.minutes)}</td><td>{r.days}日</td></tr>)}
+          </tbody></table></div>}
+          <h3>場所の上位10件</h3>
+          {topPlaces.length === 0 ? <p className="hint">この条件の記録はありません。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>場所</th><th>その場所だけ</th><th>複数のうち</th><th>日数</th></tr></thead><tbody>
+            {topPlaces.map((r) => <tr key={r.label}><td>{r.label}</td><td>{formatDuration(r.minutes)}</td><td>{formatDuration(r.sharedMinutes)}</td><td>{r.days}日</td></tr>)}
           </tbody></table></div>}
         </section>}
         <section>

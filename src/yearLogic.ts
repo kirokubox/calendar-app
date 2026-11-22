@@ -1,7 +1,9 @@
 import { PARENT_CATEGORIES } from "./constants.js";
-import { searchAll } from "./searchLogic.js";
-import { parentOf, type ReviewStats, type StackedDay } from "./reviewLogic.js";
-import type { CalendarEvent, LastItem, Marker, Nagara, ParentCategory, Settings } from "./types.js";
+import { addDays, addMinutes, datePart } from "./dateUtils.js";
+import { peopleInPeriod } from "./peopleLogic.js";
+import { parsePlace } from "./placeLogic.js";
+import { colorKeyOf, isMainEvent, parentOf, reviewNagaraInterval, type Period, type ReviewStats, type StackedDay } from "./reviewLogic.js";
+import type { CalendarEvent, Nagara, ParentCategory, Settings } from "./types.js";
 
 export type YearMonth = { month: string; total: number; parents: Record<ParentCategory, number>; unrecorded: number };
 
@@ -37,12 +39,31 @@ export function monthlyTrend(days: StackedDay[]): StackedDay[] {
   return [...map].map(([month, segments]) => ({ date: `${month}-01`, segments: [...segments.values()] }));
 }
 
-export function yearlyLastItems(items: LastItem[], events: CalendarEvent[], nagara: Nagara[], markers: Marker[], settings: Settings, start: string, end: string, nowLocal: string) {
-  return items.map((item) => {
-    const hits = searchAll(events, nagara, markers, settings, { text: item.name, field: "all", from: start, to: end, kind: "actual" })
-      .filter((hit) => hit.start >= `${start}T00:00` && hit.start < `${end}T00:00` && hit.start <= nowLocal);
-    const dates = new Set(hits.map((hit) => hit.start.slice(0, 10)));
-    const sorted = [...dates].sort();
-    return { item, count: dates.size, last: sorted[sorted.length - 1] ?? null };
-  }).sort((a, b) => b.count - a.count || a.item.name.localeCompare(b.item.name));
+export function yearPeople(events: CalendarEvent[], period: Period, cutoff: string, nowLocal: string, includeRoutine: boolean, settings: Settings) {
+  const selected = includeRoutine ? events : events.filter((e) => parentOf(colorKeyOf(e), settings) !== "仕事");
+  return peopleInPeriod(selected, period, cutoff, nowLocal).slice(0, 10);
+}
+
+/** 場所の時間は既存の「場所・移動ごとの時間」と同じ集計を使い、日数だけ区間から数える。 */
+export function yearPlaces(stats: ReviewStats, events: CalendarEvent[], nagara: Nagara[], period: Period, cutoff: string, includeRoutine: boolean) {
+  const days = new Map<string, Set<string>>();
+  const mark = (label: string, start: string, end: string) => {
+    const from = start > `${period.start}T00:00` ? start : `${period.start}T00:00`;
+    const to = end < cutoff ? end : cutoff;
+    if (from >= to) return;
+    const set = days.get(label) ?? new Set<string>();
+    for (let day = datePart(from), last = datePart(addMinutes(to, -1)); day <= last; day = addDays(day, 1)) set.add(day);
+    days.set(label, set);
+  };
+  for (const e of events) if (isMainEvent(e)) for (const label of new Set(e.places)) mark(label, e.start, e.end);
+  const eventMap = new Map(events.map((e) => [e.id, e]));
+  for (const n of nagara) if (n.type === "place") {
+    const interval = reviewNagaraInterval(n, eventMap, cutoff);
+    if (interval) mark(n.label, interval.start, interval.end);
+  }
+  return stats.placeTotals
+    .filter((p) => includeRoutine || !["家", "職場", "移動"].includes(parsePlace(p.label).kind ?? ""))
+    .map((p) => ({ ...p, days: days.get(p.label)?.size ?? 0 }))
+    .sort((a, b) => b.minutes + b.sharedMinutes - a.minutes - a.sharedMinutes || a.label.localeCompare(b.label, "ja"))
+    .slice(0, 10);
 }

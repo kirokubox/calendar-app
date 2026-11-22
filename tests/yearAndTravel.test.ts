@@ -4,7 +4,7 @@ import { defaultSettings } from "../src/constants.js";
 import { eventDefaults } from "../src/migrate.js";
 import { pairTravelMarkers, travelPairSummaries } from "../src/markerLogic.js";
 import { computeReview, equivalentPreviousCutoff, periodOf, shiftPeriod } from "../src/reviewLogic.js";
-import { yearlyLastItems, yearMonths } from "../src/yearLogic.js";
+import { yearPeople, yearPlaces, yearMonths } from "../src/yearLogic.js";
 import type { CalendarEvent, Marker } from "../src/types.js";
 
 const stamp = "2026-01-01T00:00:00.000Z";
@@ -28,19 +28,22 @@ test("年の境目で切り、前年を今年と同じ経過時間で比べる",
   assert.equal(months[2].total, 0);
 });
 
-test("前回の一覧の今年の回数は実績がある日数で数える", () => {
+test("年の上位は通常の人・場所を除き、切り替えで含める", () => {
   const settings = defaultSettings();
-  const items = [{ id: "x", name: "散歩", targetDays: null }];
+  settings.categoryParents["1"] = "仕事";
+  settings.categoryParents["2"] = "自由時間";
+  const period = periodOf("year", "2026-06-01", 1);
   const events = [
-    event("old", "散歩", "2025-12-31T23:00", "2026-01-01T01:00"),
-    event("a", "散歩", "2026-01-02T10:00", "2026-01-02T11:00"),
-    event("b", "散歩", "2026-01-02T15:00", "2026-01-02T16:00"),
-    event("c", "散歩", "2026-03-04T10:00", "2026-03-04T11:00"),
-    { ...event("plan", "散歩", "2026-01-03T10:00", "2026-01-03T11:00"), kind: "plan" as const },
+    { ...event("work", "勤務", "2026-01-02T09:00", "2026-01-02T17:00"), colorId: "1", people: ["同僚"], places: ["職場"] },
+    { ...event("trip", "散歩", "2026-01-03T10:00", "2026-01-03T12:00"), colorId: "2", people: ["友人"], places: ["外出先＞公園", "移動＞電車", "自宅"] },
   ];
-  const rows = yearlyLastItems(items, events, [], [], settings, "2026-01-01", "2027-01-01", "2026-02-01T00:00");
-  assert.equal(rows[0].count, 1);
-  assert.equal(rows[0].last, "2026-01-02");
+  const cutoff = "2026-02-01T00:00";
+  const stats = computeReview(events, [], period, true, cutoff);
+  assert.deepEqual(yearPeople(events, period, cutoff, cutoff, false, settings).map((p) => p.name), ["友人"]);
+  assert.deepEqual(yearPeople(events, period, cutoff, cutoff, true, settings).map((p) => p.name), ["同僚", "友人"]);
+  assert.deepEqual(yearPlaces(stats, events, [], period, cutoff, false).map((p) => p.label), ["外出先＞公園", "自宅"]);
+  assert.equal(yearPlaces(stats, events, [], period, cutoff, true).length, 4);
+  assert.equal(yearPlaces(stats, events, [], period, cutoff, false)[0].days, 1);
 });
 
 test("移動の組は途中の再開始・日またぎ・6時間超え・未対を処理する", () => {
