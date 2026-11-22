@@ -9,7 +9,7 @@ import { monthlyTrend, yearMonths, yearPeople, yearPlaces } from "./yearLogic";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import {
   DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
-  detailColor, equivalentPreviousCutoff, formatSigned, parseBarTarget, parentOf, periodCutoff, periodLabel, periodOf, shiftPeriod, stackedBarSeries,
+  detailColor, equivalentPreviousCutoff, formatSigned, parseBarTarget, parentOf, periodCutoff, periodLabel, periodOf, planOnlyReviewEvents, shiftPeriod, stackedBarSeries,
   unconfirmedInPeriod, type BarTarget, type PeriodKind,
 } from "./reviewLogic";
 import type { CalendarEvent, Marker, Nagara, ParentCategory, Settings } from "./types";
@@ -39,18 +39,20 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
   const [includeRoutine, setIncludeRoutine] = useState(false);
 
   const period = useMemo(() => periodOf(kind, anchor, settings.weekStartDay), [kind, anchor, settings.weekStartDay]);
+  const reviewEvents = useMemo(() => settings.planOnly ? planOnlyReviewEvents(events) : events, [events, settings.planOnly]);
+  const reviewNagara = useMemo(() => settings.planOnly ? [] : nagara, [settings.planOnly, nagara]);
   const prevPeriod = useMemo(() => shiftPeriod(period, -1), [period]);
   const cutoff = useMemo(() => periodCutoff(period, nowLocal), [period, nowLocal]);
   const prevCutoff = useMemo(() => equivalentPreviousCutoff(period, prevPeriod, nowLocal), [period, prevPeriod, nowLocal]);
-  const stats = useMemo(() => computeReview(events, nagara, period, true, cutoff), [events, nagara, period, cutoff]);
-  const prevStats = useMemo(() => computeReview(events, nagara, prevPeriod, false, prevCutoff), [events, nagara, prevPeriod, prevCutoff]);
+  const stats = useMemo(() => computeReview(reviewEvents, reviewNagara, period, true, cutoff), [reviewEvents, reviewNagara, period, cutoff]);
+  const prevStats = useMemo(() => computeReview(reviewEvents, reviewNagara, prevPeriod, false, prevCutoff), [reviewEvents, reviewNagara, prevPeriod, prevCutoff]);
   const breakdown = useMemo(() => buildBreakdown(stats, settings), [stats, settings]);
   const diffRows = useMemo(() => buildDiffRows(stats, prevStats, settings), [stats, prevStats, settings]);
   const stackedBars = useMemo(() => stackedBarSeries(stats, target, settings), [stats, target, settings]);
   const trendBars = useMemo(() => kind === "year" ? monthlyTrend(stackedBars) : stackedBars, [kind, stackedBars]);
   const months = useMemo(() => kind === "year" ? yearMonths(stats, settings) : [], [kind, stats, settings]);
-  const topPeople = useMemo(() => kind === "year" ? yearPeople(events, period, cutoff, nowLocal, includeRoutine, settings) : [], [kind, events, period, cutoff, nowLocal, includeRoutine, settings]);
-  const topPlaces = useMemo(() => kind === "year" ? yearPlaces(stats, events, nagara, period, cutoff, includeRoutine) : [], [kind, stats, events, nagara, period, cutoff, includeRoutine]);
+  const topPeople = useMemo(() => kind === "year" ? yearPeople(reviewEvents, period, cutoff, nowLocal, includeRoutine, settings) : [], [kind, reviewEvents, period, cutoff, nowLocal, includeRoutine, settings]);
+  const topPlaces = useMemo(() => kind === "year" ? yearPlaces(stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine) : [], [kind, stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine]);
   const travel = useMemo(() => travelPairSummaries(markers, period.start, period.end), [markers, period]);
   const nagaraBars = useMemo(() => stats.perDay.map((d) => ({
     date: d.date,
@@ -58,8 +60,8 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
       .map((n) => ({ key: n.label, label: n.label, minutes: d.byNagara[n.label] ?? 0, color: detailColor(`nagara:${n.label}`) }))
       .filter((s) => s.minutes > 0),
   })), [stats]);
-  const people = useMemo(() => peopleInPeriod(events, period, cutoff, nowLocal), [events, period, cutoff, nowLocal]);
-  const unconfirmed = useMemo(() => unconfirmedInPeriod(events, period, nowLocal), [events, period, nowLocal]);
+  const people = useMemo(() => peopleInPeriod(reviewEvents, period, cutoff, nowLocal), [reviewEvents, period, cutoff, nowLocal]);
+  const unconfirmed = useMemo(() => settings.planOnly ? [] : unconfirmedInPeriod(events, period, nowLocal), [events, period, nowLocal, settings.planOnly]);
 
   const total = breakdown.totalMinutes;
   const todayKey = nowLocal.slice(0, 10);
@@ -101,6 +103,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
       </header>
 
       <div className="settings-body review-body">
+        {settings.planOnly && <p className="hint">予定で数えています（キャンセルした予定を除く）。</p>}
         {kind === "year" && <section>
           <h2>12か月の時間構成</h2>
           <div className="year-months">
@@ -164,7 +167,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
                 ]}
           </ul>
           <p className="hint">
-            実績と種別不明のイベントを集計（予定・キャンセル・終日は除く）。主行動が重なった時間は件数で等分し、合計は期間の長さに一致します。
+            {settings.planOnly ? "キャンセルしていない予定" : "実績と種別不明のイベント（予定・キャンセルは除く）"}を集計（終日は除く）。主行動が重なった時間は件数で等分し、合計は期間の長さに一致します。
             {partialPeriod ? "現在の期間は、未来を除いて現在時刻までを集計しています。" : ""}
           </p>
         </section>
@@ -306,7 +309,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           )}
         </section>
 
-        <section>
+        {!settings.planOnly && <section>
           <h2>移動（マーカーの組）</h2>
           <p className="hint">対応する始まりと終わりが6時間以内のときだけ数えます。時間構成には含めません。</p>
           <div className="table-scroll"><table className="data-table"><thead><tr><th>組</th><th>回数</th><th>合計</th><th>平均</th><th>最短</th><th>最長</th></tr></thead><tbody>
@@ -315,11 +318,11 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           {travel.filter((r) => r.key === openTravel).map((r) => <div key={r.key} className="table-scroll"><h3>{r.name}：日ごとの一覧</h3><table className="data-table"><thead><tr><th>日付</th><th>時刻</th><th>かかった時間</th></tr></thead><tbody>
             {r.rows.map((p) => <tr key={p.start.id}><td>{formatShortDate(p.start.at.slice(0, 10))}</td><td>{p.start.at.slice(11)}〜{p.end.at.slice(11)}</td><td>{formatDuration(p.minutes)}</td></tr>)}
           </tbody></table></div>)}
-        </section>
+        </section>}
 
         <section>
           <h2>人</h2>
-          <p className="hint">実績のうち、人を入れた記録を人ごとにまとめます。2人以上いる記録は、それぞれの人に同じ時間が入ります（足し合わせると実際より長くなります）。最後に会った日は、期間に関係なく今日までの記録から出します。名前を押すと、その人との記録を検索で開きます。</p>
+          <p className="hint">{settings.planOnly ? "予定" : "実績"}のうち、人を入れた記録を人ごとにまとめます。2人以上いる記録は、それぞれの人に同じ時間が入ります（足し合わせると実際より長くなります）。最後の日は、期間に関係なく今日までの記録から出します。名前を押すと、その人との記録を検索で開きます。</p>
           {people.length === 0 ? <p className="hint">この期間に、人を入れた実績はありません。</p> : (
             <div className="table-scroll">
               <table className="data-table">
@@ -339,7 +342,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           )}
         </section>
 
-        <section>
+        {!settings.planOnly && <section>
           <h2>未確定の予定（{unconfirmed.length}件）</h2>
           {unconfirmed.length === 0 ? <p className="hint">この期間に未確定の予定はありません。</p> : (
             <ul className="unconfirmed-list">
@@ -353,7 +356,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
               ))}
             </ul>
           )}
-        </section>
+        </section>}
       </div>
     </div>
   );

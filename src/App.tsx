@@ -45,7 +45,7 @@ import type { SearchQuery } from "./searchLogic";
 import SettingsView from "./SettingsView";
 import WeekView from "./WeekView";
 import { mergeById, settingsForRestore } from "./backup";
-import type { ActiveSleep, BackupFile, CalendarEvent, ColorId, Marker, Nagara, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
+import type { ActiveSleep, BackupFile, CalendarEvent, ColorId, Marker, Nagara, PlanRevision, RecurrenceRule, Settings, StartView, StoredPhoto } from "./types";
 
 type ViewMode = StartView;
 type ModalState =
@@ -213,7 +213,7 @@ export default function App() {
   const nextMarkerLabel = useMemo(() => nextCommuteMarker(markers, todayKey), [markers, todayKey]);
   // 日表示は今日を開いているとき、週表示は今日を含む週のとき（2026-11-21 本人「週表示でしか基本使ってない」）
   const bedtimeInfo = useMemo(
-    () => (viewMode === "day" && dayKey === todayKey) || (viewMode === "week" && weekKeys.includes(todayKey))
+    () => !settings.planOnly && ((viewMode === "day" && dayKey === todayKey) || (viewMode === "week" && weekKeys.includes(todayKey)))
       ? bedtimeSummary(events, settings, todayKey, nowLocal)
       : null,
     [dayKey, events, nowLocal, settings, todayKey, viewMode, weekKeys],
@@ -272,10 +272,12 @@ export default function App() {
     applyChanges(c);
   };
 
-  const handleSave = async (event: CalendarEvent, drafts: NagaraDraft[], scope: EditScope) => {
+  const handleSave = async (event: CalendarEvent, drafts: NagaraDraft[], scope: EditScope, photos: StoredPhoto[]) => {
     const stamp = new Date().toISOString();
     const { put, deleteIds } = buildNagaraSave(event.id, drafts, nagara, stamp, newId);
     const before = events.find((e) => e.id === event.id);
+    const putPhotos = photos.filter((p) => event.photoIds?.includes(p.id)).map((p) => ({ ...p, eventId: event.id }));
+    const deletePhotoIds = (before?.photoIds ?? []).filter((id) => !event.photoIds?.includes(id));
     // 予定の内容が変わったら、変更前の状態を履歴に残す
     const putRevisions = before && shouldRecordRevision(before, event) ? [buildRevision(before, stamp, newId)] : [];
     const rule = scope === "following" ? recurrences.find((r) => r.id === event.recurrenceId) : undefined;
@@ -287,12 +289,12 @@ export default function App() {
       await commit({
         putEvents: [...split.putEvents, saved], deleteEventIds: split.deleteEventIds,
         putNagara: [...split.putNagara, ...put], deleteNagaraIds: [...split.deleteNagaraIds, ...deleteIds],
-        putRevisions, putRecurrences: split.putRules,
+        putRevisions, putRecurrences: split.putRules, putPhotos, deletePhotoIds,
       });
       setModal(null);
       return;
     }
-    await commit({ putEvents: [event], putNagara: put, deleteNagaraIds: deleteIds, putRevisions });
+    await commit({ putEvents: [event], putNagara: put, deleteNagaraIds: deleteIds, putRevisions, putPhotos, deletePhotoIds });
     setModal(null);
   };
 
@@ -305,6 +307,7 @@ export default function App() {
       // 繰り返しの予定を手で消した日は墓標にして、作り直さない
       putRecurrences: rule && target?.recurrenceDate ? [withRemovedDate(rule, target.recurrenceDate)] : [],
       deleteEventIds: [id],
+      deletePhotoIds: target?.photoIds ?? [],
       deleteNagaraIds: nagaraIdsOfEvent(nagara, id),
       deleteRevisionIds: revisions.filter((r) => r.planId === id).map((r) => r.id),
       putEvents: unlinkActuals(events, id, stamp),
@@ -507,10 +510,10 @@ export default function App() {
     setSettings(next);
   };
 
-  const handleRestore = async (backup: BackupFile, sourceVersion: 1 | 2) => {
+  const handleRestore = async (backup: BackupFile, sourceVersion: 1 | 2, photos: StoredPhoto[] = []) => {
     const nextSettings = settingsForRestore(backup, sourceVersion, settings);
     await restoreAll({
-      events: backup.events, nagara: backup.nagara, revisions: backup.revisions, recurrences: backup.recurrences, markers: backup.markers, settings: nextSettings,
+      events: backup.events, nagara: backup.nagara, revisions: backup.revisions, recurrences: backup.recurrences, markers: backup.markers, settings: nextSettings, photos,
     });
     setEvents((prev) => mergeById(prev, backup.events));
     setNagara((prev) => mergeById(prev, backup.nagara));
@@ -654,7 +657,7 @@ export default function App() {
           onBack={() => setView("calendar")}
           onOpenEvent={openEvent}
           onOpenPerson={(name) => {
-            setSearchQuery({ text: name, field: "people", from: "", to: "", kind: "actual" });
+            setSearchQuery({ text: name, field: "people", from: "", to: "", kind: settings.planOnly ? "plan" : "actual" });
             setView("search");
           }}
         />
@@ -763,7 +766,7 @@ export default function App() {
         </div>
       </header>
 
-      <RunningBand
+      {!settings.planOnly && <RunningBand
         sessions={running}
         sleep={activeSleep}
         nowLocal={nowLocal}
@@ -771,7 +774,7 @@ export default function App() {
         onEndSession={(n) => void endSession(n)}
         onWake={() => void wake()}
         onCancelSleep={cancelSleep}
-      />
+      />}
 
       {bedtimeInfo && (
         <div className="bedtime-summary">
@@ -812,7 +815,7 @@ export default function App() {
               className="events-area"
               ref={areaRef}
               onClick={onAreaClick}
-              style={{ backgroundSize: `100% ${HOUR_HEIGHT}px`, right: LANE_WIDTH }}
+              style={{ backgroundSize: `100% ${HOUR_HEIGHT}px`, right: settings.planOnly ? 0 : LANE_WIDTH }}
             >
               {dayLayout.back.map(({ seg, variant, covered }) => (
                 <EventBlock
@@ -835,10 +838,10 @@ export default function App() {
                   onOpen={() => openEvent(seg.event)}
                 />
               ))}
-              <MarkerPins items={dayMarkers} hourHeight={HOUR_HEIGHT} mode="full" onOpen={(m) => setModal({ mode: "marker", marker: m })} />
+              {!settings.planOnly && <MarkerPins items={dayMarkers} hourHeight={HOUR_HEIGHT} mode="full" onOpen={(m) => setModal({ mode: "marker", marker: m })} />}
               {dayKey === todayKey && <div className="now-line" style={{ top: (nowMin / 60) * HOUR_HEIGHT }}><i /></div>}
             </div>
-            <div
+            {!settings.planOnly && <div
               className="lane"
               ref={laneRef}
               onClick={onLaneClick}
@@ -862,7 +865,7 @@ export default function App() {
                   </button>
                 );
               })}
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -871,7 +874,7 @@ export default function App() {
         <WeekView
           dayKeys={weekKeys}
           events={events}
-          markers={markers}
+          markers={settings.planOnly ? [] : markers}
           labelsByEvent={labelsByEvent}
           linked={linked}
           nowLocal={nowLocal}
@@ -890,10 +893,10 @@ export default function App() {
       )}
       </div>
 
-      <button type="button" className="fab fab-quick" aria-label="いまの時刻で記録（マーカー・ながら・睡眠）" aria-expanded={quickOpen} onClick={() => setQuickOpen((v) => !v)}><Icon name="diamond" size={18} /></button>
+      {!settings.planOnly && <button type="button" className="fab fab-quick" aria-label="いまの時刻で記録（マーカー・ながら・睡眠）" aria-expanded={quickOpen} onClick={() => setQuickOpen((v) => !v)}><Icon name="diamond" size={18} /></button>}
       <button type="button" className="fab" aria-label="予定・実績を追加" onClick={onPlus}><Icon name="plus" size={28} /></button>
 
-      {quickOpen && (
+      {quickOpen && !settings.planOnly && (
         <QuickPanel
           markerCandidates={markerLabels}
           nextMarkerCandidate={nextMarkerLabel}

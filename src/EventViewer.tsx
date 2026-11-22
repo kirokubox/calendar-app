@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { COLOR_HEX } from "./constants";
 import { datePart, diffMinutes, formatShortDate, timePart } from "./dateUtils";
 import { formatDelta, planActualDiff, planLabel } from "./planLogic";
+import EventPhotos from "./EventPhotos";
 import { categoryName, colorKeyOf, formatDuration, parentOf } from "./reviewLogic";
 import { useBackdropClose } from "./useBackdropClose";
 import type { CalendarEvent, Settings } from "./types";
@@ -75,11 +76,11 @@ export default function EventViewer({ event, plan, siblings, nagaraLabels, sessi
         <p className="view-when">{whenLabel(event)}</p>
 
         <div className="view-list">
-          {row("カテゴリ", `${categoryName(key, settings)}（${parentOf(key, settings)}）${event.subcategory ? `／${event.subcategory}` : ""}`)}
+          {row("カテゴリ", `${categoryName(key, settings)}（${parentOf(key, settings)}）${!settings.planOnly && event.subcategory ? `／${event.subcategory}` : ""}`)}
           {event.people.length > 0 && row("人", event.people.join("・"))}
           {event.places.length > 0 && row("場所・移動", event.places.join(" → "))}
-          {nagaraLabels.length > 0 && row("ながら", nagaraLabels.join("、"))}
-          {sessionLabels.length > 0 && row("重なっていたセッション", sessionLabels.join("、"))}
+          {!settings.planOnly && nagaraLabels.length > 0 && row("ながら", nagaraLabels.join("、"))}
+          {!settings.planOnly && sessionLabels.length > 0 && row("重なっていたセッション", sessionLabels.join("、"))}
           {row("種別", KIND_LABEL[event.kind])}
         </div>
 
@@ -89,6 +90,7 @@ export default function EventViewer({ event, plan, siblings, nagaraLabels, sessi
             <p>{event.memo}</p>
           </div>
         )}
+        {(event.photoIds?.length ?? 0) > 0 && <div className="view-memo"><span className="field-label">写真</span><EventPhotos ids={event.photoIds ?? []} /></div>}
 
         {plan && diff && (
           <div className="view-plan">

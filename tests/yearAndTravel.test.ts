@@ -3,7 +3,7 @@ import test from "node:test";
 import { defaultSettings } from "../src/constants.js";
 import { eventDefaults } from "../src/migrate.js";
 import { pairTravelMarkers, travelPairSummaries } from "../src/markerLogic.js";
-import { computeReview, equivalentPreviousCutoff, periodOf, shiftPeriod } from "../src/reviewLogic.js";
+import { computeReview, equivalentPreviousCutoff, periodOf, planOnlyReviewEvents, shiftPeriod } from "../src/reviewLogic.js";
 import { yearPeople, yearPlaces, yearMonths } from "../src/yearLogic.js";
 import type { CalendarEvent, Marker } from "../src/types.js";
 
@@ -65,4 +65,16 @@ test("移動の組は途中の再開始・日またぎ・6時間超え・未対�
   assert.equal(pairs[1].minutes, 30);
   const summary = travelPairSummaries(markers, "2026-01-01", "2026-02-01");
   assert.equal(summary.find((s) => s.key === "toWork")?.average, 50);
+});
+
+test("予定専用の振り返りは有効な予定だけを数え、元データを変えない", () => {
+  const plan = { ...event("p", "予定", "2026-01-02T10:00", "2026-01-02T11:00"), kind: "plan" as const };
+  const cancel = { ...event("c", "中止", "2026-01-02T11:00", "2026-01-02T12:00"), kind: "plan" as const, status: "cancelled" as const };
+  const actual = event("a", "実績", "2026-01-02T12:00", "2026-01-02T13:00");
+  const input = [plan, cancel, actual];
+  const mapped = planOnlyReviewEvents(input);
+  assert.deepEqual(mapped.map((e) => e.id), ["p"]);
+  assert.equal(mapped[0].kind, "actual");
+  assert.equal(plan.kind, "plan");
+  assert.equal(computeReview(mapped, [], periodOf("month", "2026-01-02", 1)).byColor.default, 60);
 });

@@ -1,7 +1,11 @@
 import type { ParentCategory, PlaceKind, Settings } from "./types.js";
 
-export const APP_VERSION = "0.13.0";
+export const APP_VERSION = "0.14.0";
 export const BACKUP_APP_NAME = "calendar-app";
+export const PHOTO_MAX_EDGE = 1200;
+export const THUMB_MAX_EDGE = 360;
+export const PHOTO_WEBP_QUALITY = 0.8;
+export const PHOTO_JPEG_QUALITY = 0.82;
 
 export const COLOR_IDS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"] as const;
 
@@ -80,6 +84,7 @@ export function defaultSettings(): Settings {
     weekdayBedtime: null,
     holidayBedtime: null,
     lastItems: [],
+    planOnly: false,
     categoryParents: defaultCategoryParents(),
     colorLabels: {
       default: "趣味・遊び",

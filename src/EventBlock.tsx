@@ -106,6 +106,7 @@ export default function EventBlock({ seg, dayKey, nagaraLabels, density = "day",
             {fromPlan && wide && <b className="badge-plan" aria-hidden="true">予</b>}
             {unconfirmed && <b className="badge-unconfirmed">未確定</b>}
             {title}
+            {e.kind !== "plan" && (e.photoIds?.length ?? 0) > 0 && <small className="event-photo-mark" aria-label="写真あり"> 📷</small>}
             {plus && !lines.nagaraLine && <small className="event-nagara"> {plus}</small>}
           </span>
           {lines.nagaraLine && <span className="event-line event-nagara">{plus}</span>}

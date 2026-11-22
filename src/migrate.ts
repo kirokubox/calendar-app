@@ -57,6 +57,7 @@ export function migrateEvent(raw: Rec): CalendarEvent {
     googleEventId: strOrNull(raw.googleEventId),
     original: isRecord(raw.original) ? raw.original : null,
     importedAt: strOrNull(raw.importedAt),
+    ...(raw.photoIds !== undefined ? { photoIds: strArray(raw.photoIds) } : {}),
   };
 }
 
@@ -88,6 +89,7 @@ export function migrateSettings(raw: unknown): Settings {
     weekdayBedtime: timeOrNull(raw.weekdayBedtime),
     holidayBedtime: timeOrNull(raw.holidayBedtime),
     lastItems: migrateLastItems(raw.lastItems),
+    planOnly: raw.planOnly === true,
   };
 }
 

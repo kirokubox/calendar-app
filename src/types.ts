@@ -36,6 +36,20 @@ export interface CalendarEvent {
   /** 取り込み元データを丸ごと保存 */
   original: Record<string, unknown> | null;
   importedAt: string | null;
+  /** 実績・種別不明の生活写真。古い記録には無い */
+  photoIds?: string[];
+}
+
+export interface StoredPhoto {
+  id: string;
+  eventId: string;
+  blob: Blob;
+  thumb?: Blob;
+  mimeType: string;
+  width: number;
+  height: number;
+  byteSize: number;
+  createdAt: string;
 }
 
 /** nagara＝並行していた行動、place＝その場所にいた時間 */
@@ -143,6 +157,8 @@ export interface Settings {
   holidayBedtime: string | null;
   /** 検索画面の「前回」の一覧に出す項目（v0.6.0〜。無い設定・バックアップは空として読む）。並びは登録した順 */
   lastItems: LastItem[];
+  /** 予定だけのかんたん表示。未設定ならオフ */
+  planOnly?: boolean;
 }
 
 /** 場所の大分類。場所欄の1件は「大分類＞詳しい名前」か「大分類」だけの文字で持つ（v0.7.0〜） */

@@ -55,6 +55,7 @@ function validateEventItem(v: unknown, index: number): string | CalendarEvent {
   // v2で追加した項目：あれば型を検証する（v1には無いので、無ければ既定値になる）
   if (v.people !== undefined && !isStrArray(v.people)) return `${at}.people が文字列の配列ではありません`;
   if (v.places !== undefined && !isStrArray(v.places)) return `${at}.places が文字列の配列ではありません`;
+  if (v.photoIds !== undefined && !isStrArray(v.photoIds)) return `${at}.photoIds が文字列の配列ではありません`;
   if (v.memo !== undefined && typeof v.memo !== "string") return `${at}.memo が文字列ではありません`;
   if (v.subcategory !== undefined && !isStrOrNull(v.subcategory)) return `${at}.subcategory が文字列または null ではありません`;
   if (v.cancelReason !== undefined && typeof v.cancelReason !== "string") return `${at}.cancelReason が文字列ではありません`;
@@ -226,6 +227,7 @@ export function validateBackup(value: unknown): ValidationResult {
         schemaVersion: 2, colorLabels, weekStartDay: migrated.weekStartDay, categoryParents: migrated.categoryParents,
         startView: migrated.startView, weekdayBedtime: migrated.weekdayBedtime, holidayBedtime: migrated.holidayBedtime,
         lastItems: migrated.lastItems,
+        planOnly: migrated.planOnly,
       },
     },
   };
@@ -273,5 +275,6 @@ export function settingsForRestore(backup: BackupFile, sourceVersion: 1 | 2, cur
     weekdayBedtime: current.weekdayBedtime,
     holidayBedtime: current.holidayBedtime,
     lastItems: current.lastItems,
+    planOnly: current.planOnly,
   };
 }

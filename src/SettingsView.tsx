@@ -6,9 +6,12 @@ import AiMarkdownSettings from "./AiMarkdownSettings";
 import IcsExportSettings from "./IcsExportSettings";
 import GoogleImportSettings from "./GoogleImportSettings";
 import { Icon } from "./Icon";
+import { buildPhotoZip, readPhotoZip } from "./photoBackup";
+import { withThumbs } from "./photos";
+import { getAllPhotos } from "./storage";
 import LastItemsSettings from "./LastItemsSettings";
 import RecurrenceSettings from "./RecurrenceSettings";
-import type { ActiveSleep, BackupFile, CalendarEvent, Marker, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView } from "./types";
+import type { ActiveSleep, BackupFile, CalendarEvent, Marker, Nagara, ParentCategory, PlanRevision, RecurrenceRule, Settings, StartView, StoredPhoto } from "./types";
 
 interface Props {
   settings: Settings;
@@ -25,7 +28,7 @@ interface Props {
   onEditRule: (rule: RecurrenceRule) => void;
   onToggleRule: (rule: RecurrenceRule) => Promise<void>;
   onDeleteRecurrence: (rule: RecurrenceRule, deleteFuture: boolean) => Promise<void>;
-  onRestore: (backup: BackupFile, sourceVersion: 1 | 2) => Promise<void>;
+  onRestore: (backup: BackupFile, sourceVersion: 1 | 2, photos?: StoredPhoto[]) => Promise<void>;
   onImportGoogle: (create: CalendarEvent[], update: CalendarEvent[]) => Promise<void>;
 }
 
@@ -54,10 +57,11 @@ export default function SettingsView({
   const [parentMessage, setParentMessage] = useState("");
   const [weekMessage, setWeekMessage] = useState("");
   const [startMessage, setStartMessage] = useState("");
+  const [planOnlyMessage, setPlanOnlyMessage] = useState("");
   const [weekdayBedtime, setWeekdayBedtime] = useState(settings.weekdayBedtime ?? "");
   const [holidayBedtime, setHolidayBedtime] = useState(settings.holidayBedtime ?? "");
   const [bedtimeMessage, setBedtimeMessage] = useState("");
-  const [pending, setPending] = useState<{ backup: BackupFile; summary: BackupSummary; fileName: string; sourceVersion: 1 | 2 } | null>(null);
+  const [pending, setPending] = useState<{ backup: BackupFile; summary: BackupSummary; fileName: string; sourceVersion: 1 | 2; photos: StoredPhoto[] } | null>(null);
   const [restoreError, setRestoreError] = useState("");
   const [restoreMessage, setRestoreMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -146,14 +150,36 @@ export default function SettingsView({
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const exportZip = async () => {
+    setBusy(true);
+    try {
+      const now = new Date();
+      const blob = await buildPhotoZip(events, settings, { nagara, revisions, recurrences, markers }, await getAllPhotos(), now);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `calendar-backup-${dateKeyOf(now)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setRestoreError(e instanceof Error ? e.message : "ZIPを保存できませんでした"); }
+    setBusy(false);
+  };
+
   const onFile = async (file: File | undefined) => {
     setRestoreError("");
     setRestoreMessage("");
     setPending(null);
     if (!file) return;
     let parsed: unknown;
+    let photos: StoredPhoto[] = [];
     try {
-      parsed = JSON.parse(await file.text());
+      if (file.name.toLowerCase().endsWith(".zip")) {
+        const zip = await readPhotoZip(file);
+        parsed = zip.backup;
+        photos = await withThumbs(zip.photos);
+      } else parsed = JSON.parse(await file.text());
     } catch {
       setRestoreError("ファイルを読み込めませんでした（壊れているか、バックアップのファイルではありません）");
       return;
@@ -163,14 +189,14 @@ export default function SettingsView({
       setRestoreError(`このファイルは復元できません：${result.reason}`);
       return;
     }
-    setPending({ backup: result.backup, summary: summarizeBackup(result.backup), fileName: file.name, sourceVersion: result.sourceVersion });
+    setPending({ backup: result.backup, summary: summarizeBackup(result.backup), fileName: file.name, sourceVersion: result.sourceVersion, photos });
   };
 
   const confirmRestore = async () => {
     if (!pending) return;
     setBusy(true);
     try {
-      await onRestore(pending.backup, pending.sourceVersion);
+      await onRestore(pending.backup, pending.sourceVersion, pending.photos);
       setLabels({ ...pending.backup.settings.colorLabels });
       if (pending.sourceVersion === 2) setParents({ ...pending.backup.settings.categoryParents });
       const restoredSettings = pending.sourceVersion === 2 ? pending.backup.settings : settings;
@@ -201,6 +227,16 @@ export default function SettingsView({
       </header>
 
       <div className="settings-body">
+        <section>
+          <h2>予定だけで使う</h2>
+          <label className="year-routine-toggle"><input type="checkbox" checked={settings.planOnly === true} disabled={busy} onChange={(e) => {
+            const checked = e.target.checked;
+            setBusy(true);
+            void onSaveSettings({ ...settings, planOnly: checked }).then(() => setPlanOnlyMessage("保存しました")).catch((err) => setPlanOnlyMessage(err instanceof Error ? err.message : "保存できませんでした")).finally(() => setBusy(false));
+          }} />予定だけで使う</label>
+          <p className="hint">オンにすると実績・ながら・マーカーの入力を隠し、振り返りはキャンセルしていない予定で数えます。オフに戻すと元の表示に戻ります。</p>
+          {planOnlyMessage && <p className="hint" role="status">{planOnlyMessage}</p>}
+        </section>
         <section>
           <h2>色とカテゴリ名</h2>
           <p className="hint">色ごとにカテゴリ名を付けられます。名前を空にすると「他の色」に入ります。</p>
@@ -317,12 +353,18 @@ export default function SettingsView({
           <h2>バックアップ</h2>
           <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所、{markers.length} 件のマーカーがあります。</p>
           <div className="inline-actions">
-            <button type="button" className="secondary-btn" onClick={exportJson}>バックアップを保存</button>
+            <button type="button" className="secondary-btn" onClick={exportJson}>JSONで保存</button>
+            <button type="button" className="secondary-btn" onClick={() => void exportZip()} disabled={busy}>写真つきZIPで保存</button>
             <label className="secondary-btn file-btn">
-              バックアップから復元
-              <input ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => onFile(e.target.files?.[0])} />
+              JSONから復元
+              <input ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => void onFile(e.target.files?.[0])} />
+            </label>
+            <label className="secondary-btn file-btn">
+              ZIPから復元
+              <input type="file" accept="application/zip,.zip" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />
             </label>
           </div>
+          <p className="hint">JSONには写真の本体が入りません。写真も残す場合はZIPで保存してください。写真は個別にも保存できます。</p>
           {restoreError && <p className="notice error" role="alert">{restoreError}</p>}
           {restoreMessage && <p className="notice ok">{restoreMessage}</p>}
           {pending && (

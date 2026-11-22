@@ -13,10 +13,12 @@ import { draftsFromNagara, nagaraLabelSuggestions, validateNagaraDrafts, type Na
 import { newId } from "./storage";
 import ChipInput from "./ChipInput";
 import PlaceInput from "./PlaceInput";
+import EventPhotos from "./EventPhotos";
+import { preparePhoto } from "./photos";
 import NagaraChips from "./NagaraChips";
 import SessionForm from "./SessionForm";
 import { useBackdropClose } from "./useBackdropClose";
-import type { CalendarEvent, ColorId, EventKind, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types";
+import type { CalendarEvent, ColorId, EventKind, Nagara, PlanRevision, RecurrenceRule, Settings, StoredPhoto } from "./types";
 
 export type ModalTab = "event" | "session";
 /** 繰り返しから作った予定を編集したときの反映範囲 */
@@ -50,7 +52,7 @@ interface Props {
   settings: Settings;
   /** 現在のローカル時刻（YYYY-MM-DDTHH:mm） */
   now: string;
-  onSave: (event: CalendarEvent, drafts: NagaraDraft[], scope: EditScope) => Promise<void>;
+  onSave: (event: CalendarEvent, drafts: NagaraDraft[], scope: EditScope, photos: StoredPhoto[]) => Promise<void>;
   onSaveRule?: (rule: RecurrenceRule) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onAsPlanned: (plan: CalendarEvent) => Promise<void>;
@@ -99,6 +101,10 @@ export default function EventModal({
   const [people, setPeople] = useState<string[]>(isRule ? rule.people : src?.people ?? []);
   const [places, setPlaces] = useState<string[]>(isRule ? rule.places : src?.places ?? []);
   const [memo, setMemo] = useState(isRule ? rule.memo : src?.memo ?? "");
+  const [photoIds, setPhotoIds] = useState<string[]>(event?.photoIds ?? []);
+  const [photoDrafts, setPhotoDrafts] = useState<StoredPhoto[]>([]);
+  const [photoError, setPhotoError] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [subcategory, setSubcategory] = useState((isRule ? rule.subcategory : src?.subcategory) ?? "");
   const initialDrafts = useMemo<NagaraDraft[]>(() => {
     if (isRule) return rule.nagaraLabels.map((label) => ({ key: newId(), id: null, label, start: null, end: null }));
@@ -136,7 +142,7 @@ export default function EventModal({
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [showRevisions, setShowRevisions] = useState(false);
-  const hasDetail = people.length > 0 || places.length > 0 || memo !== "" || subcategory !== "" || drafts.length > 0;
+  const hasDetail = people.length > 0 || places.length > 0 || memo !== "" || subcategory !== "" || drafts.length > 0 || photoIds.length > 0;
   const [showDetail, setShowDetail] = useState(() => isRule || hasDetail || readDetailPref());
   const [showOtherColors, setShowOtherColors] = useState(() => {
     const c = isRule ? rule.colorId : event?.colorId;
@@ -180,8 +186,8 @@ export default function EventModal({
   const error = isRule
     ? validateRule(ruleDraft)
     : validateEvent(title, start, end, allDay) ?? validateNagaraDrafts(drafts);
-  const autoJudged = !editing && kindChoice === null;
-  const kind: EventKind = kindChoice ?? autoKind(start, now);
+  const autoJudged = !settings.planOnly && !editing && kindChoice === null;
+  const kind: EventKind = settings.planOnly ? (editing && event.kind !== "plan" ? event.kind : "plan") : kindChoice ?? autoKind(start, now);
 
   const onTitleChange = (value: string) => {
     setTitle(value);
@@ -284,6 +290,7 @@ export default function EventModal({
       people,
       places,
       memo,
+      photoIds: kind === "plan" ? [] : photoIds,
       subcategory: subcategory.trim() || null,
       id: event?.id ?? newId(),
       title: title.trim(),
@@ -298,8 +305,24 @@ export default function EventModal({
     };
   };
 
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setPhotoError("");
+    const remaining = 10 - photoIds.length;
+    if (files.length > remaining) { setPhotoError("写真は1件につき10枚までです"); return; }
+    setPhotoBusy(true);
+    try {
+      const prepared: StoredPhoto[] = [];
+      for (const file of Array.from(files)) prepared.push(await preparePhoto(file, event?.id ?? "", new Date().toISOString()));
+      setPhotoDrafts((prev) => [...prev, ...prepared]);
+      setPhotoIds((prev) => [...prev, ...prepared.map((p) => p.id)]);
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : "写真を読み込めませんでした");
+    } finally { setPhotoBusy(false); }
+  };
+
   const handleSave = () => {
-    if (error || busy) return;
+    if (error || busy || photoBusy) return;
     if (isRule) {
       const next: RecurrenceRule = {
         ...rule,
@@ -323,6 +346,7 @@ export default function EventModal({
     const next = buildEvent();
     if (editing && event.recurrenceId !== null && occurrenceRule) {
       const unchanged = JSON.stringify(snapshotOf(event)) === JSON.stringify(snapshotOf(next)) && event.kind === next.kind
+        && JSON.stringify(event.photoIds ?? []) === JSON.stringify(next.photoIds ?? [])
         && sortedLabels(drafts) === sortedLabels(initialDrafts);
       if (unchanged) {
         // 何も変えていない保存で「個別編集」扱いにしない
@@ -332,12 +356,12 @@ export default function EventModal({
       setAskScope(next);
       return;
     }
-    void runSave(() => onSave(next, drafts, "single"));
+    void runSave(() => onSave(next, drafts, "single", photoDrafts));
   };
 
   const saveWithScope = (scope: EditScope) => {
     if (!askScope) return;
-    void runSave(() => onSave(askScope, drafts, scope));
+    void runSave(() => onSave(askScope, drafts, scope, photoDrafts));
   };
 
   // 「この日以降」は内容の変更だけ。日付・終日・種別を変えたときは「この予定だけ」
@@ -410,12 +434,12 @@ export default function EventModal({
         <div className="sheet-head">
           <h2>{heading}</h2>
           <div className="sheet-head-actions">
-            {showTopSave && <button type="button" className="primary-btn small" onClick={handleSave} disabled={!!error || busy}>保存</button>}
+            {showTopSave && <button type="button" className="primary-btn small" onClick={handleSave} disabled={!!error || busy || photoBusy}>保存</button>}
             <button type="button" className="text-btn" onClick={onClose}>閉じる</button>
           </div>
         </div>
 
-        {mode === "new" && (
+        {mode === "new" && !settings.planOnly && (
           <div className="segmented tabs" role="tablist" aria-label="入力の種類">
             <button type="button" role="tab" aria-selected={tab === "event"} className={tab === "event" ? "on" : ""} onClick={() => setTab("event")}>イベント</button>
             <button type="button" role="tab" aria-selected={tab === "session"} className={tab === "session" ? "on" : ""} onClick={() => setTab("session")}>ながらセッション</button>
@@ -434,8 +458,8 @@ export default function EventModal({
         )}
         {isPlan && event.status === "active" && (
           <div className="plan-actions">
-            <button type="button" className="primary-btn" disabled={busy} onClick={() => runPlanAction(() => onAsPlanned(event))}>予定通り</button>
-            <button type="button" className="secondary-btn" disabled={busy} onClick={() => onRecordActual(event)}>実績を入力</button>
+            {!settings.planOnly && <button type="button" className="primary-btn" disabled={busy} onClick={() => runPlanAction(() => onAsPlanned(event))}>予定通り</button>}
+            {!settings.planOnly && <button type="button" className="secondary-btn" disabled={busy} onClick={() => onRecordActual(event)}>実績を入力</button>}
             <button type="button" className="secondary-btn" disabled={busy} onClick={() => setShowCancel((v) => !v)} aria-expanded={showCancel}>キャンセル</button>
             {showCancel && (
               <div className="plan-reason">
@@ -554,8 +578,8 @@ export default function EventModal({
         </button>
         {showDetail && (
           <div className="detail">
-            <div className="detail-grid">
-              <div className="detail-col">
+            <div className={`detail-grid ${settings.planOnly ? "plan-only" : ""}`}>
+              {!settings.planOnly && <div className="detail-col">
                 <NagaraChips
                   drafts={drafts}
                   onChange={setDrafts}
@@ -587,7 +611,7 @@ export default function EventModal({
                     </div>
                   )}
                 </div>
-              </div>
+              </div>}
               <div className="detail-col">
                 <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：友人" listId="people-suggestions" />
               </div>
@@ -603,7 +627,14 @@ export default function EventModal({
               onChange={(e) => setMemo(e.target.value)}
             />
             <p className="hint">1日全体の感想や長い日記は、季節日記へ。</p>
-            {!isRule && (
+            {!isRule && kind !== "plan" && <div className="event-photo-input">
+              <span className="field-label">写真（最大10枚）</span>
+              <EventPhotos ids={photoIds} drafts={photoDrafts} onRemove={(id) => { setPhotoIds((prev) => prev.filter((x) => x !== id)); setPhotoDrafts((prev) => prev.filter((p) => p.id !== id)); }} />
+              {photoIds.length < 10 && <label className="secondary-btn file-btn">写真を追加<input type="file" accept="image/*" multiple disabled={photoBusy} onChange={(e) => { void addPhotos(e.target.files); e.target.value = ""; }} /></label>}
+              {photoBusy && <p className="hint">写真を準備しています…</p>}
+              {photoError && <p className="notice error" role="alert">{photoError}</p>}
+            </div>}
+            {!isRule && !settings.planOnly && (
               <>
                 <span className="field-label">種別</span>
                 <div className="segmented">
@@ -665,7 +696,7 @@ export default function EventModal({
           <div className="sheet-actions">
             {editing && <button type="button" className="danger-btn" onClick={handleDelete} disabled={busy}>削除</button>}
             <span className="spacer" />
-            <button type="button" className="primary-btn" onClick={handleSave} disabled={!!error || busy}>保存</button>
+            <button type="button" className="primary-btn" onClick={handleSave} disabled={!!error || busy || photoBusy}>保存</button>
           </div>
         )}
         </div>

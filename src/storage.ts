@@ -1,18 +1,19 @@
 import { migrateEvent, migrateSettings } from "./migrate.js";
-import type { ActiveSleep, CalendarEvent, Marker, Nagara, PlanRevision, RecurrenceRule, Settings } from "./types.js";
+import type { ActiveSleep, CalendarEvent, Marker, Nagara, PlanRevision, RecurrenceRule, Settings, StoredPhoto } from "./types.js";
 
 const DB_NAME = "calendar-app";
 /**
  * 1: events / settings、2: nagara / revisions / recurrences を追加し、イベントと設定を v2 へ移行、
- * 3: markers を追加（既存のストアとデータには触れない）
+ * 3: markers を追加、4: photos を追加（既存のストアとデータには触れない）
  */
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const EVENTS = "events";
 const SETTINGS = "settings";
 const NAGARA = "nagara";
 const REVISIONS = "revisions";
 const RECURRENCES = "recurrences";
 const MARKERS = "markers";
+const PHOTOS = "photos";
 const SETTINGS_KEY = "app";
 /** 記録中の睡眠（就寝を押してから起床を押すまで）。設定ストアの別キーに置く */
 const ACTIVE_SLEEP_KEY = "activeSleep";
@@ -31,6 +32,7 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(REVISIONS)) db.createObjectStore(REVISIONS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(RECURRENCES)) db.createObjectStore(RECURRENCES, { keyPath: "id" });
       if (!db.objectStoreNames.contains(MARKERS)) db.createObjectStore(MARKERS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS, { keyPath: "id" });
       // v1 → v2：既存イベントへ既定値を付け、設定に週の始まり・親カテゴリを足す
       if (tx && ev.oldVersion >= 1 && ev.oldVersion < 2) {
         const events = tx.objectStore(EVENTS);
@@ -97,6 +99,8 @@ export interface Changes {
   deleteRevisionIds?: string[];
   putRecurrences?: RecurrenceRule[];
   deleteRecurrenceIds?: string[];
+  putPhotos?: StoredPhoto[];
+  deletePhotoIds?: string[];
 }
 
 export async function commitChanges(c: Changes): Promise<void> {
@@ -105,6 +109,7 @@ export async function commitChanges(c: Changes): Promise<void> {
     { store: NAGARA, put: c.putNagara, deleteKeys: c.deleteNagaraIds },
     { store: REVISIONS, put: c.putRevisions, deleteKeys: c.deleteRevisionIds },
     { store: RECURRENCES, put: c.putRecurrences, deleteKeys: c.deleteRecurrenceIds },
+    { store: PHOTOS, put: c.putPhotos, deleteKeys: c.deletePhotoIds },
   ]);
 }
 
@@ -112,6 +117,18 @@ export async function getAllEvents(): Promise<CalendarEvent[]> {
   const raw = await run<Array<Record<string, unknown>>>(EVENTS, "readonly", (s) => s.getAll());
   // 念のため読み込み時にも既定値を補う（移行済みなら変化しない）
   return raw.map(migrateEvent);
+}
+
+export async function getPhoto(id: string): Promise<StoredPhoto | undefined> {
+  return run<StoredPhoto | undefined>(PHOTOS, "readonly", (s) => s.get(id));
+}
+
+export async function getAllPhotos(): Promise<StoredPhoto[]> {
+  return run<StoredPhoto[]>(PHOTOS, "readonly", (s) => s.getAll());
+}
+
+export async function putPhotos(photos: StoredPhoto[]): Promise<void> {
+  if (photos.length) await writeAll([{ store: PHOTOS, put: photos }]);
 }
 
 export async function getAllNagara(): Promise<Nagara[]> {
@@ -194,10 +211,12 @@ export async function restoreAll(data: {
   recurrences: RecurrenceRule[];
   markers: Marker[];
   settings: Settings;
+  photos?: StoredPhoto[];
 }): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction([EVENTS, NAGARA, REVISIONS, RECURRENCES, MARKERS, SETTINGS], "readwrite");
+    const tx = db.transaction([EVENTS, NAGARA, REVISIONS, RECURRENCES, MARKERS, SETTINGS, PHOTOS], "readwrite");
+    for (const photo of data.photos ?? []) tx.objectStore(PHOTOS).put(photo);
     for (const m of data.markers) tx.objectStore(MARKERS).put(m);
     for (const e of data.events) tx.objectStore(EVENTS).put(e);
     for (const n of data.nagara) tx.objectStore(NAGARA).put(n);

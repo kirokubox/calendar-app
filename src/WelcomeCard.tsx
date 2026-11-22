@@ -35,7 +35,7 @@ export default function WelcomeCard({ onAdd, onOpenReview, onOpenSettings }: Pro
       </ol>
       <p className="welcome-note">
         実績を付けずに、予定だけのカレンダーとしても使えます。Googleカレンダーの予定やバックアップは、設定から読み込めます。
-        <button type="button" className="text-btn" onClick={onOpenSettings}>設定を開く</button>
+        <button type="button" className="text-btn" onClick={onOpenSettings}>「予定だけで使う」を設定</button>
       </p>
     </section>
   );
