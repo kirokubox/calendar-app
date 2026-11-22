@@ -218,7 +218,7 @@ export default function ReviewView({ events, nagara, settings, nowLocal, kind, a
           )}
           <h3>ながら側から見る</h3>
           <p className="hint">
-            主行動＝タイトルがラベルと同じ実績。流れに含む＝「A→B」「A/B」のタイトルの一部にラベルが出てくる実績の長さ（そのうちどれだけかは分かりません）。
+            主行動＝タイトルがラベルと同じ実績。流れに含む＝「A→B」「A▶B」「A/B」のタイトルの一部にラベルが出てくる実績の長さ（そのうちどれだけかは分かりません）。
             ながら＝ながらの時間から、その2つに重なる区間を除いた時間。
           </p>
           {stats.sideBySide.length === 0 ? <p className="hint">なし</p> : (

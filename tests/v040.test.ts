@@ -72,6 +72,11 @@ test("タイトルの区切り：→ と / で分ける", () => {
   assert.deepEqual(titleTokens("日記・振り返り→YouTube→買い物→帰宅"), ["日記・振り返り", "YouTube", "買い物", "帰宅"]);
   assert.deepEqual(titleTokens("通勤/仮眠"), ["通勤", "仮眠"]);
   assert.deepEqual(titleTokens("YouTube"), ["YouTube"]);
+  // 「▶」は「→」と同じ順番の区切り（v0.10.1）。異体字セレクタ付きも同じ
+  assert.deepEqual(titleTokens("入浴▶スキンケア"), ["入浴", "スキンケア"]);
+  assert.deepEqual(titleTokens("YouTube▶︎買い物"), ["YouTube", "買い物"]);
+  assert.deepEqual(titleTokens("ネジ締め▶️赤チェック付け"), ["ネジ締め", "赤チェック付け"]);
+  assert.deepEqual(titleTokens("朝礼▶PCS→片付け/雑務"), ["朝礼", "PCS", "片付け", "雑務"]);
 });
 
 test("継続中のセッション：終了なしで保存でき、指定した時刻までとして扱う", () => {

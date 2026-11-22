@@ -134,9 +134,10 @@ export function displayTitle(event: Pick<CalendarEvent, "title" | "people">): st
   return people.length > 0 ? `${people.join("・")}　${event.title}` : event.title;
 }
 
-/** タイトルを「→」「/」で区切った要素（前後の空白を除く・空は捨てる）。複合タイトルの中にあるラベルを見つけるために使う */
+/** タイトルを「→」「▶」「/」で区切った要素（前後の空白を除く・空は捨てる）。複合タイトルの中にあるラベルを見つけるために使う。
+ * 「▶」は「→」と同じ順番の区切り（v0.10.1）。絵文字表示用の異体字セレクタ（「▶︎」「▶️」）は区切りの一部として捨てる */
 export function titleTokens(title: string): string[] {
-  return title.split(/[→/／]/).map((t) => t.trim()).filter((t) => t !== "");
+  return title.split(/[→▶►/／][︎️]?/).map((t) => t.trim()).filter((t) => t !== "");
 }
 
 export interface BlockLines {
