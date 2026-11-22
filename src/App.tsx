@@ -211,9 +211,12 @@ export default function App() {
   const running = useMemo(() => ongoingSessions(nagara), [nagara]);
   const markerLabels = useMemo(() => markerCandidates(FIXED_MARKERS, markers), [markers]);
   const nextMarkerLabel = useMemo(() => nextCommuteMarker(markers, todayKey), [markers, todayKey]);
+  // 日表示は今日を開いているとき、週表示は今日を含む週のとき（2026-11-21 本人「週表示でしか基本使ってない」）
   const bedtimeInfo = useMemo(
-    () => viewMode === "day" && dayKey === todayKey ? bedtimeSummary(events, settings, todayKey, nowLocal) : null,
-    [dayKey, events, nowLocal, settings, todayKey, viewMode],
+    () => (viewMode === "day" && dayKey === todayKey) || (viewMode === "week" && weekKeys.includes(todayKey))
+      ? bedtimeSummary(events, settings, todayKey, nowLocal)
+      : null,
+    [dayKey, events, nowLocal, settings, todayKey, viewMode, weekKeys],
   );
   const sessionLabels = useMemo(() => {
     const busy = new Set(running.map((n) => n.label));
@@ -771,7 +774,7 @@ export default function App() {
 
       {bedtimeInfo && (
         <div className="bedtime-summary">
-          就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}
+          {viewMode === "week" && "今日・"}就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}
           {bedtimeInfo.plannedMinutes > 0 && <>・予定 {formatDuration(bedtimeInfo.plannedMinutes)}</>}
         </div>
       )}

@@ -284,7 +284,7 @@ export default function SettingsView({
 
         <section>
           <h2>就寝予定の時刻</h2>
-          <p className="hint">日表示で今日を開いたとき、就寝までの残り時間を出します。0:00〜4:59は翌日の未明として扱います。</p>
+          <p className="hint">日表示で今日を開いたときと、今日を含む週を週表示で開いたときに、就寝までの残り時間を出します。0:00〜4:59は翌日の未明として扱います。</p>
           <div className="bedtime-settings">
             <label><span>平日</span><input type="time" value={weekdayBedtime} onChange={(e) => { setWeekdayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
             <label><span>休日（土日・祝日）</span><input type="time" value={holidayBedtime} onChange={(e) => { setHolidayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
