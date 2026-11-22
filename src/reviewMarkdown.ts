@@ -2,7 +2,7 @@
 import { addDays, datePart, formatShortDate, minutesToTime } from "./dateUtils.js";
 import { clipRangeToDay } from "./layout.js";
 import {
-  buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, colorKeyOf, computeReview, equivalentPreviousCutoff, formatDuration, formatPercent, formatSigned, localFromIso, periodCutoff,
+  buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, colorKeyOf, computeReview, equivalentPreviousCutoff, eventSubcategories, formatDuration, formatPercent, formatSigned, localFromIso, periodCutoff,
   overlapsPeriod, parentOf, periodDays, periodLabel, planChangesInPeriod, shiftPeriod, unconfirmedInPeriod, upcomingInPeriod, type Period,
 } from "./reviewLogic.js";
 import { displayTitle, titleTokens } from "./eventLogic.js";
@@ -198,7 +198,7 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
     }
   }
   const periodMarkers = markersInRange(markers, period.start, period.end);
-  const header = ["時刻", "種別", "カテゴリ", "人", "タイトル", "ながら", "場所・移動", "メモ", "予定"];
+  const header = ["時刻", "種別", "カテゴリ", "細分類", "人", "タイトル", "ながら", "場所・移動", "メモ", "予定"];
   for (const day of periodDays(period)) {
     out.push(`### ${day} ${formatShortDate(day).replace(/^\d+\/\d+/, "")}`, "");
     const rows: Array<{ sort: number; cells: string[] }> = [];
@@ -226,7 +226,7 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
       rows.push({
         sort,
         cells: [
-          time, kindLabel(e), `${categoryName(key, settings)}（${parentOf(key, settings)}）`, e.people.join("・"), e.title, nagaraCell, places.join(" → "), e.memo,
+          time, kindLabel(e), `${categoryName(key, settings)}（${parentOf(key, settings)}）`, eventSubcategories(e, period, cutoff), e.people.join("・"), e.title, nagaraCell, places.join(" → "), e.memo,
           e.planId && planById.has(e.planId) ? planLabel(planById.get(e.planId) as CalendarEvent) : "",
         ],
       });
@@ -235,12 +235,12 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
       const r = clipRangeToDay(s.start, s.end, day);
       if (!r) continue;
       const kind = `${s.n.type === "place" ? "場所" : "ながら"}セッション${isOngoing(s.n) ? "（継続中）" : ""}`;
-      rows.push({ sort: r.startMin, cells: [rangeCell(r), kind, "", "", s.n.label, "", "", "", ""] });
+      rows.push({ sort: r.startMin, cells: [rangeCell(r), kind, "", "", "", s.n.label, "", "", "", ""] });
     }
     for (const m of periodMarkers) {
       if (datePart(m.at) !== day) continue;
       const minute = Number(m.at.slice(11, 13)) * 60 + Number(m.at.slice(14, 16));
-      rows.push({ sort: minute, cells: [minutesToTime(minute), "マーカー", "", "", m.label, "", "", "", ""] });
+      rows.push({ sort: minute, cells: [minutesToTime(minute), "マーカー", "", "", "", m.label, "", "", "", ""] });
     }
     rows.sort((a, b) => a.sort - b.sort);
     out.push(...(rows.length > 0 ? table(header, rows.map((r) => r.cells)) : ["（なし）"]), "");

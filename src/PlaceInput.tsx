@@ -20,6 +20,7 @@ interface Props {
 export default function PlaceInput({ values, onChange, suggestions, fixed, listId }: Props) {
   const [kind, setKind] = useState<PlaceKind | null>(null);
   const [text, setText] = useState("");
+  const [activeChip, setActiveChip] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const add = (value: string) => {
@@ -48,15 +49,17 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
   const canAdd = kind !== null || text.trim() !== "";
 
   return (
-    <div className="chip-input">
+    <div className="chip-input place-input">
       <span className="field-label">場所・移動（順番あり）</span>
       {values.length > 0 && (
         <ul className="chip-list">
           {values.map((v, i) => (
-            <li key={v} className="chip">
-              <button type="button" className="chip-mini" aria-label={`${v}を前へ`} disabled={i === 0} onClick={() => onChange(moveItem(values, i, -1))}><Icon name="chevron-up" size={16} /></button>
-              <button type="button" className="chip-mini" aria-label={`${v}を後ろへ`} disabled={i === values.length - 1} onClick={() => onChange(moveItem(values, i, 1))}><Icon name="chevron-down" size={16} /></button>
-              <span className="chip-text">{v}</span>
+            <li key={v} className="chip place-chip">
+              <button type="button" className="place-chip-text" aria-expanded={activeChip === v} onClick={() => setActiveChip(activeChip === v ? null : v)}>{v}</button>
+              {activeChip === v && <>
+                <button type="button" className="place-chip-move" disabled={i === 0} onClick={() => onChange(moveItem(values, i, -1))}>前へ</button>
+                <button type="button" className="place-chip-move" disabled={i === values.length - 1} onClick={() => onChange(moveItem(values, i, 1))}>後ろへ</button>
+              </>}
               <button type="button" className="chip-mini" aria-label={`${v}を外す`} onClick={() => onChange(values.filter((x) => x !== v))}><Icon name="x" size={14} /></button>
             </li>
           ))}
@@ -93,7 +96,7 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
         {suggestions.map((s) => <option key={s} value={s} />)}
       </datalist>
       {quick.length > 0 && (
-        <div className="quick-list">
+        <div className="quick-list place-quick-list">
           {quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>＋{s}</button>)}
         </div>
       )}

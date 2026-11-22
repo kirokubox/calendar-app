@@ -44,7 +44,24 @@ test("週のMarkdown：5ブロックの構成・エスケープ・主行動な�
   assert.ok(!md.includes("今日以降の分も未記録"), "期間が過去なら注記しない");
   const detail = md.split("\n").filter((l) => l.startsWith("| 10:00–12:00"));
   assert.equal(detail.length, 1);
-  assert.equal(detail[0].replace(/\\\|/g, "").split("|").length, 11, "9列＋両端");
+  assert.equal(detail[0].replace(/\\\|/g, "").split("|").length, 12, "10列＋両端");
+});
+
+test("明細の細分類は手入力・自動判定・空を時間構成と同じ判定で出す", () => {
+  const period = periodOf("week", "2026-10-08", 1);
+  const events = [
+    ev("manual", "架空の作業", "2026-10-06T09:00", "2026-10-06T10:00", { colorId: "9", subcategory: "自分で入力" }),
+    ev("auto", "仮眠", "2026-10-06T11:00", "2026-10-06T12:00", { colorId: "1" }),
+    ev("blank", "架空の行動", "2026-10-06T13:00", "2026-10-06T14:00", { colorId: "2", source: "google" }),
+  ];
+  const md = buildReviewMarkdown({ events, nagara: [], revisions: [], settings: defaultSettings(), period, nowLocal: "2026-10-20T09:00" });
+  const lines = md.split("\n");
+  assert.ok(lines.some((l) => l.includes("| カテゴリ | 細分類 | 人 |")));
+  assert.ok(lines.some((l) => l.includes("| 自分で入力 |") && l.includes("架空の作業")));
+  assert.ok(lines.some((l) => l.includes("| 仮眠 |") && l.includes("| 仮眠 |")));
+  assert.ok(lines.some((l) => l.includes("架空の行動") && l.includes("|  | 架空の行動")));
+  assert.ok(md.slice(0, md.indexOf("## 2.")).includes("自分で入力"));
+  assert.ok(md.slice(0, md.indexOf("## 2.")).includes("仮眠"));
 });
 
 test("月のMarkdown：日数ぶんの見出しと、未来を分母へ含めない注記", () => {

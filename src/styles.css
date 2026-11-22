@@ -545,8 +545,14 @@ button { cursor: pointer; }
 .search-memo { font-size: var(--kb-fs-s); color: var(--kb-text-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; word-break: break-all; }
 
 /* 入力：場所の大分類 */
-.place-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.place-kinds { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; min-width: 0; }
 .place-kind { min-height: 32px; padding: 0 12px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-pill); background: #fff; color: var(--kb-text); font: inherit; font-size: 0.85rem; }
+.place-kinds .place-kind, .place-quick-list .quick { flex: none; }
+.place-quick-list { flex-wrap: nowrap; overflow-x: auto; min-width: 0; }
+.place-chip { max-width: 100%; min-width: 0; }
+.place-chip-text { min-width: 0; padding: 4px 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.place-chip-move { flex: none; padding: 4px 6px; border: 0; border-radius: var(--kb-radius-s); background: var(--kb-surface-2); color: var(--accent-dark); font: inherit; font-size: var(--kb-fs-xs); }
+.place-chip-move:disabled { opacity: .35; }
 .place-kind.selected { border-color: var(--accent-dark); background: var(--kb-accent-soft); font-weight: 700; }
 
 /* はじめに（記録が1件もないときだけ） */

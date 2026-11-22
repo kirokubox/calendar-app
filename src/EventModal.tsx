@@ -590,9 +590,9 @@ export default function EventModal({
               </div>
               <div className="detail-col">
                 <ChipInput label="人" values={people} onChange={setPeople} suggestions={peopleList} placeholder="例：友人" listId="people-suggestions" />
-                <PlaceInput values={places} onChange={setPlaces} suggestions={placeList} fixed={FIXED_PLACES} listId="place-suggestions" />
               </div>
             </div>
+            <PlaceInput values={places} onChange={setPlaces} suggestions={placeList} fixed={FIXED_PLACES} listId="place-suggestions" />
             <label className="field-label" htmlFor="memo-input">メモ</label>
             <textarea
               id="memo-input"
