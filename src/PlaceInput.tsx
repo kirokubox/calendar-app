@@ -78,7 +78,7 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
           </button>
         ))}
       </div>
-      <div className="quick-list place-quick-list"><button type="button" className="quick quick-add" aria-label="場所を新しく追加" aria-expanded={open} onClick={() => setOpen((value) => !value)}>＋</button>{previous.length > 0 && <button type="button" className="quick" onClick={() => onChange([...values, ...previous])}>さっきと同じ</button>}{quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>{s}</button>)}</div>
+      <div className="quick-list place-quick-list"><button type="button" className="quick quick-add" aria-label="場所を新しく追加" aria-expanded={open} onClick={() => setOpen((value) => !value)}>＋</button>{previous.length > 0 && <button type="button" className="quick" onClick={() => onChange([...values, ...previous])}>直前と同じ</button>}{quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>{s}</button>)}</div>
       {open && <div className="chip-add">
         <input
           ref={inputRef}
