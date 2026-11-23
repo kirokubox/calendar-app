@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { PLACE_KINDS } from "./constants";
-import { addChipValue, moveItem, quickCandidates } from "./eventLogic";
+import { addChipValue, moveItem, recentQuickCandidates } from "./eventLogic";
 import { Icon } from "./Icon";
 import { formatPlace, parsePlace } from "./placeLogic";
 import type { PlaceKind } from "./types";
@@ -50,7 +50,8 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
     }
   };
 
-  const quick = quickCandidates([...priority, ...fixed], suggestions, values);
+  // 候補は「＋」を先頭に、最近使った5つだけ。使ったことが無いときだけ固定の候補（家・職場など）で埋める
+  const quick = recentQuickCandidates(priority, [...suggestions, ...fixed], values);
   const canAdd = kind !== null || text.trim() !== "";
 
   return (
@@ -77,7 +78,7 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
           </button>
         ))}
       </div>
-      <div className="quick-list place-quick-list">{previous.length > 0 && <button type="button" className="quick" onClick={() => onChange([...values, ...previous])}>さっきと同じ</button>}{quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>{s}</button>)}<button type="button" className="quick" aria-label="場所を新しく追加" onClick={() => setOpen((value) => !value)}>＋</button></div>
+      <div className="quick-list place-quick-list"><button type="button" className="quick quick-add" aria-label="場所を新しく追加" aria-expanded={open} onClick={() => setOpen((value) => !value)}>＋</button>{previous.length > 0 && <button type="button" className="quick" onClick={() => onChange([...values, ...previous])}>さっきと同じ</button>}{quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>{s}</button>)}</div>
       {open && <div className="chip-add">
         <input
           ref={inputRef}
@@ -99,7 +100,7 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
         <button type="button" className="secondary-btn small" onClick={addDraft} disabled={!canAdd}>追加</button>
       </div>}
       <datalist id={listId}>
-        {suggestions.map((s) => <option key={s} value={s} />)}
+        {[...suggestions, ...fixed.filter((f) => !suggestions.includes(f))].map((s) => <option key={s} value={s} />)}
       </datalist>
     </div>
   );

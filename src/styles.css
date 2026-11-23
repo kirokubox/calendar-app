@@ -236,6 +236,7 @@ button { cursor: pointer; }
 .secondary-btn.small { min-height: 36px; padding: 0 14px; }
 .quick-list { display: flex; flex-wrap: nowrap; overflow-x: auto; min-width: 0; gap: 6px; }
 .quick-list .quick { flex: none; }
+.quick.quick-add { border-style: solid; font-weight: 700; min-width: 34px; }
 .quick { border: 1px dashed var(--kb-line-strong); background: #fff; border-radius: var(--kb-radius-pill); padding: 4px 10px; font-size: var(--kb-fs-s); color: var(--accent-dark); min-height: 30px; }
 .memo-input { width: 100%; padding: 8px 10px; border: 1px solid var(--kb-line-strong); border-radius: var(--kb-radius-s); font: inherit; resize: vertical; background: #fff; }
 

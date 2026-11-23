@@ -3,7 +3,7 @@ import { Icon } from "./Icon";
 import { COLOR_HEX, COLOR_IDS, FIXED_NAGARA, FIXED_PLACES } from "./constants";
 import { addDays, datePart, formatShortDate, joinLocal, timePart, toLocal, weekdayName } from "./dateUtils";
 import {
-  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, colorSuggestions, deriveEndDate, isNextDay, peopleSuggestions, placeSuggestions, previousActualPlaces, shiftEnd, startDateKeepingEnd,
+  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, colorRecentSuggestions, colorSuggestions, deriveEndDate, isNextDay, peopleSuggestions, placeSuggestions, previousActualPlaces, shiftEnd, startDateKeepingEnd,
   subcategorySuggestions, titleSuggestions, validateEvent, type Range,
 } from "./eventLogic";
 import { holidayName } from "./holidays";
@@ -172,8 +172,8 @@ export default function EventModal({
   const placeList = useMemo(() => placeSuggestions(events), [events]);
   const subcategoryList = useMemo(() => subcategorySuggestions(events), [events]);
   const colorSubcategories = useMemo(() => colorSuggestions(events, colorId, now.slice(0, 10), (event) => event.subcategory ? [event.subcategory] : []), [events, colorId, now]);
-  const colorPeople = useMemo(() => colorSuggestions(events, colorId, now.slice(0, 10), (event) => event.people), [events, colorId, now]);
-  const colorPlaces = useMemo(() => colorSuggestions(events, colorId, now.slice(0, 10), (event) => event.places), [events, colorId, now]);
+  const colorPeople = useMemo(() => colorRecentSuggestions(events, colorId, now.slice(0, 10), (event) => event.people), [events, colorId, now]);
+  const colorPlaces = useMemo(() => colorRecentSuggestions(events, colorId, now.slice(0, 10), (event) => event.places), [events, colorId, now]);
   const colorNagara = useMemo(() => {
     const byEvent = new Map<string, string[]>();
     for (const item of nagara) if (item.type === "nagara" && item.eventId) byEvent.set(item.eventId, [...(byEvent.get(item.eventId) ?? []), item.label]);
@@ -583,7 +583,7 @@ export default function EventModal({
           )}
         </div>
 
-        {!settings.planOnly && <div className="chip-input subcategory-input"><span className="field-label">細分類</span>{subcategory.trim() && <ul className="chip-list"><li className="chip"><span className="chip-text">{subcategory}</span><button type="button" className="chip-mini" aria-label="細分類を外す" onClick={() => setSubcategory("")}><Icon name="x" size={14} /></button></li></ul>}<div className="quick-list">{colorSubcategories.map((name) => <button key={name} type="button" className={`quick${name === subcategory.trim() ? " selected" : ""}`} aria-pressed={name === subcategory.trim()} onClick={() => setSubcategory(name === subcategory.trim() ? "" : name)}>{name}</button>)}<button type="button" className="quick" aria-label="細分類を新しく追加" onClick={() => setShowSubcategoryInput((value) => !value)}>＋</button></div>{showSubcategoryInput && <div className="chip-add"><input type="text" list="subcategory-suggestions" value={subcategory} placeholder="空欄なら自動" aria-label="細分類を入力" onChange={(e) => setSubcategory(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); setShowSubcategoryInput(false); } }} /><button type="button" className="secondary-btn small" onClick={() => setShowSubcategoryInput(false)}>追加</button></div>}<datalist id="subcategory-suggestions">{subcategoryList.map((name) => <option key={name} value={name} />)}</datalist></div>}
+        {!settings.planOnly && <div className="chip-input subcategory-input"><span className="field-label">細分類</span>{subcategory.trim() && <ul className="chip-list"><li className="chip"><span className="chip-text">{subcategory}</span><button type="button" className="chip-mini" aria-label="細分類を外す" onClick={() => setSubcategory("")}><Icon name="x" size={14} /></button></li></ul>}<div className="quick-list"><button type="button" className="quick quick-add" aria-label="細分類を新しく追加" aria-expanded={showSubcategoryInput} onClick={() => setShowSubcategoryInput((value) => !value)}>＋</button>{colorSubcategories.map((name) => <button key={name} type="button" className={`quick${name === subcategory.trim() ? " selected" : ""}`} aria-pressed={name === subcategory.trim()} onClick={() => setSubcategory(name === subcategory.trim() ? "" : name)}>{name}</button>)}</div>{showSubcategoryInput && <div className="chip-add"><input type="text" list="subcategory-suggestions" value={subcategory} placeholder="空欄なら自動" aria-label="細分類を入力" onChange={(e) => setSubcategory(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); setShowSubcategoryInput(false); } }} /><button type="button" className="secondary-btn small" onClick={() => setShowSubcategoryInput(false)}>追加</button></div>}<datalist id="subcategory-suggestions">{subcategoryList.map((name) => <option key={name} value={name} />)}</datalist></div>}
 
         <button type="button" className="link-btn detail-toggle" onClick={toggleDetail} aria-expanded={showDetail}>
           {showDetail ? "詳細を閉じる" : `詳細${hasDetail ? "（入力あり）" : ""}`}

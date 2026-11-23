@@ -236,6 +236,32 @@ export function colorSuggestions(events: CalendarEvent[], colorId: string | null
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja")).slice(0, limit).map(([name]) => name);
 }
 
+/** 選んだ色で直近90日に使った名前を、最後に使った記録が新しい順に並べる（人・場所のワンタップ候補。v1.0.0） */
+export function colorRecentSuggestions(events: CalendarEvent[], colorId: string | null, todayKey: string, pick: (event: CalendarEvent) => string[]): string[] {
+  const since = addDays(todayKey, -90);
+  const latest = new Map<string, string>();
+  for (const event of events) {
+    const day = event.start.slice(0, 10);
+    if (event.colorId !== colorId || day < since || day > todayKey || event.status === "cancelled") continue;
+    for (const raw of pick(event)) {
+      const name = raw.trim();
+      if (name && (latest.get(name) ?? "") < event.start) latest.set(name, event.start);
+    }
+  }
+  return [...latest].sort((a, b) => b[1].localeCompare(a[1]) || a[0].localeCompare(b[0], "ja")).map(([name]) => name);
+}
+
+/** 人・場所のワンタップ候補：選んだ色で最近使ったものを先に、足りなければ全体の最近使ったもので埋め、合わせて count 件まで。選択済みは除く（v1.0.0） */
+export function recentQuickCandidates(colorRecent: string[], history: string[], selected: string[], count = 5): string[] {
+  const out: string[] = [];
+  for (const v of [...colorRecent, ...history]) {
+    if (out.length >= count) break;
+    if (selected.includes(v) || out.includes(v)) continue;
+    out.push(v);
+  }
+  return out;
+}
+
 /** 同じ日・入力中の記録より前の、最も近い実績の場所を返す。 */
 export function previousActualPlaces(events: CalendarEvent[], start: string, selected: string[]): string[] {
   const previous = events.filter((event) => event.kind === "actual" && event.status !== "cancelled" && event.start.slice(0, 10) === start.slice(0, 10) && event.start < start)

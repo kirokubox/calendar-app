@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { addChipValue, moveItem, quickCandidates } from "./eventLogic";
+import { addChipValue, moveItem, recentQuickCandidates } from "./eventLogic";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -11,13 +11,12 @@ interface Props {
   /** 順番を上下で入れ替えられるか（場所） */
   reorderable?: boolean;
   listId: string;
-  /** 固定候補（履歴候補より先に出す） */
-  fixed?: string[];
+  /** 選んだ色で最近使った名前（新しい順）。ワンタップ候補の先頭に出す */
   priority?: string[];
 }
 
 /** 人・場所の入力：入力して追加するチップ式。候補はdatalistと、よく使うもののワンタップ追加で出す */
-export default function ChipInput({ label, values, onChange, suggestions, placeholder, reorderable, listId, fixed = [], priority = [] }: Props) {
+export default function ChipInput({ label, values, onChange, suggestions, placeholder, reorderable, listId, priority = [] }: Props) {
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
 
@@ -27,7 +26,8 @@ export default function ChipInput({ label, values, onChange, suggestions, placeh
     setOpen(false);
   };
 
-  const quick = quickCandidates([...priority, ...fixed], suggestions, values);
+  // 候補は「＋」を先頭に、最近使った5つだけ（2026-11-23 本人「＋が一番左、横スクロールは直近の5つでいい」）
+  const quick = recentQuickCandidates(priority, suggestions, values);
 
   return (
     <div className="chip-input">
@@ -48,7 +48,7 @@ export default function ChipInput({ label, values, onChange, suggestions, placeh
           ))}
         </ul>
       )}
-      <div className="quick-list">{quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>{s}</button>)}<button type="button" className="quick" aria-label={`${label}を新しく追加`} onClick={() => setOpen((value) => !value)}>＋</button></div>
+      <div className="quick-list"><button type="button" className="quick quick-add" aria-label={`${label}を新しく追加`} aria-expanded={open} onClick={() => setOpen((value) => !value)}>＋</button>{quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>{s}</button>)}</div>
       {open && <div className="chip-add">
         <input
           type="text"

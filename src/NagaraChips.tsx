@@ -95,7 +95,7 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
           )}
         </div>
       )}
-      <div className="quick-list">{quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>{s}</button>)}<button type="button" className="quick" aria-label="ながらを新しく追加" onClick={() => setOpen((value) => !value)}>＋</button></div>
+      <div className="quick-list"><button type="button" className="quick quick-add" aria-label="ながらを新しく追加" aria-expanded={open} onClick={() => setOpen((value) => !value)}>＋</button>{quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>{s}</button>)}</div>
       {open && <div className="chip-add">
         <input
           type="text"
