@@ -13,18 +13,21 @@ interface Props {
   listId: string;
   /** 固定候補（履歴候補より先に出す） */
   fixed?: string[];
+  priority?: string[];
 }
 
 /** 人・場所の入力：入力して追加するチップ式。候補はdatalistと、よく使うもののワンタップ追加で出す */
-export default function ChipInput({ label, values, onChange, suggestions, placeholder, reorderable, listId, fixed = [] }: Props) {
+export default function ChipInput({ label, values, onChange, suggestions, placeholder, reorderable, listId, fixed = [], priority = [] }: Props) {
   const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
 
   const add = (value: string) => {
     onChange(addChipValue(values, value));
     setText("");
+    setOpen(false);
   };
 
-  const quick = quickCandidates(fixed, suggestions, values);
+  const quick = quickCandidates([...priority, ...fixed], suggestions, values);
 
   return (
     <div className="chip-input">
@@ -45,7 +48,8 @@ export default function ChipInput({ label, values, onChange, suggestions, placeh
           ))}
         </ul>
       )}
-      <div className="chip-add">
+      <div className="quick-list">{quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>{s}</button>)}<button type="button" className="quick" aria-label={`${label}を新しく追加`} onClick={() => setOpen((value) => !value)}>＋</button></div>
+      {open && <div className="chip-add">
         <input
           type="text"
           value={text}
@@ -59,15 +63,10 @@ export default function ChipInput({ label, values, onChange, suggestions, placeh
           }}
         />
         <button type="button" className="secondary-btn small" onClick={() => add(text)} disabled={text.trim() === ""}>追加</button>
-      </div>
+      </div>}
       <datalist id={listId}>
         {suggestions.map((s) => <option key={s} value={s} />)}
       </datalist>
-      {quick.length > 0 && (
-        <div className="quick-list">
-          {quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>＋{s}</button>)}
-        </div>
-      )}
     </div>
   );
 }

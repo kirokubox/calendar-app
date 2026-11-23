@@ -222,6 +222,27 @@ export function subcategorySuggestions(events: CalendarEvent[], limit = 100): st
   return recentValues(events, (e) => (e.subcategory ? [e.subcategory] : []), limit);
 }
 
+/** 選んだ色と直近90日の使用回数で候補を並べる。 */
+export function colorSuggestions(events: CalendarEvent[], colorId: string | null, todayKey: string, pick: (event: CalendarEvent) => string[], limit = 100): string[] {
+  const since = addDays(todayKey, -90);
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    if (event.colorId !== colorId || event.start.slice(0, 10) < since || event.start.slice(0, 10) > todayKey || event.status === "cancelled") continue;
+    for (const raw of pick(event)) {
+      const name = raw.trim();
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja")).slice(0, limit).map(([name]) => name);
+}
+
+/** 同じ日・入力中の記録より前の、最も近い実績の場所を返す。 */
+export function previousActualPlaces(events: CalendarEvent[], start: string, selected: string[]): string[] {
+  const previous = events.filter((event) => event.kind === "actual" && event.status !== "cancelled" && event.start.slice(0, 10) === start.slice(0, 10) && event.start < start)
+    .sort((a, b) => b.start.localeCompare(a.start))[0];
+  return previous?.places.length && previous.places.some((place) => !selected.includes(place)) ? previous.places.filter((place) => !selected.includes(place)) : [];
+}
+
 /** ワンタップ候補：固定候補を先に、続けて履歴の新しい順。選択済みは除く */
 export function quickCandidates(fixed: string[], history: string[], selected: string[], historyCount = 5): string[] {
   const out = fixed.filter((f) => !selected.includes(f));

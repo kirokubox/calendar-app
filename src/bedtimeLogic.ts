@@ -1,11 +1,14 @@
 import { addDays, diffMinutes, joinLocal, parseDateKey } from "./dateUtils.js";
 import { isHoliday } from "./holidays.js";
 import type { CalendarEvent, Settings } from "./types.js";
+import { colorKeyOf, parentOf } from "./reviewLogic.js";
 
 export interface BedtimeSummary {
   bedtime: string;
   remainingMinutes: number;
   plannedMinutes: number;
+  passed: boolean;
+  nextPlan: { title: string; remainingMinutes: number; ongoing: boolean } | null;
 }
 
 export function isRestDay(dayKey: string): boolean {
@@ -20,10 +23,18 @@ export function bedtimeDateTime(dayKey: string, time: string): string {
 
 /** 今日の就寝予定までの残り時間と、重なりを二重計上しない予定時間。 */
 export function bedtimeSummary(events: CalendarEvent[], settings: Settings, todayKey: string, nowLocal: string): BedtimeSummary | null {
-  const time = isRestDay(todayKey) ? settings.holidayBedtime : settings.weekdayBedtime;
+  const nightKey = nowLocal.slice(11, 16) < "05:00" ? addDays(todayKey, -1) : todayKey;
+  const tomorrow = addDays(nightKey, 1);
+  const leaveTomorrow = events.some((e) => e.start.slice(0, 10) === tomorrow && e.status !== "cancelled" && e.subcategory === "休暇" && parentOf(colorKeyOf(e), settings) === "仕事");
+  const time = isRestDay(tomorrow) || leaveTomorrow ? settings.holidayBedtime : settings.weekdayBedtime;
   if (time === null) return null;
-  const bedtime = bedtimeDateTime(todayKey, time);
-  if (bedtime <= nowLocal) return null;
+  const bedtime = bedtimeDateTime(nightKey, time);
+  if (bedtime <= nowLocal) return { bedtime, remainingMinutes: 0, plannedMinutes: 0, passed: true, nextPlan: null };
+
+  const plans = events.filter((e) => e.kind === "plan" && e.status !== "cancelled" && !e.allDay && e.start < bedtime && e.end > nowLocal).sort((a, b) => a.start.localeCompare(b.start));
+  const ongoing = plans.filter((e) => e.start <= nowLocal).sort((a, b) => a.end.localeCompare(b.end))[0];
+  const next = ongoing ?? plans[0];
+  const nextPlan = next ? { title: next.title, remainingMinutes: diffMinutes(nowLocal, ongoing ? ongoing.end : next.start), ongoing: Boolean(ongoing) } : null;
 
   const intervals = events
     .filter((e) => e.kind === "plan" && e.status !== "cancelled" && !e.allDay && e.start < bedtime && e.end > nowLocal)
@@ -44,5 +55,5 @@ export function bedtimeSummary(events: CalendarEvent[], settings: Settings, toda
   }
   if (current) plannedMinutes += diffMinutes(current.start, current.end);
 
-  return { bedtime, remainingMinutes: diffMinutes(nowLocal, bedtime), plannedMinutes };
+  return { bedtime, remainingMinutes: diffMinutes(nowLocal, bedtime), plannedMinutes, passed: false, nextPlan };
 }

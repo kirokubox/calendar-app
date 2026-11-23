@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, deriveEndDate, isNextDay, rangeForPlusButton, rangeFromTap, shiftEnd, startDateKeepingEnd,
+  allDayLastDate, autoKind, buildAllDayRange, colorForTitle, colorSuggestions, deriveEndDate, isNextDay, previousActualPlaces, rangeForPlusButton, rangeFromTap, shiftEnd, startDateKeepingEnd,
   titleSuggestions, validateEvent,
 } from "../src/eventLogic.js";
 import { eventDefaults } from "../src/migrate.js";
@@ -10,6 +10,30 @@ import type { CalendarEvent } from "../src/types.js";
 function ev(id: string, title: string, start: string, end: string, extra: Partial<CalendarEvent> = {}): CalendarEvent {
   return { id, title, start, end, allDay: false, colorId: null, kind: "actual", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...eventDefaults(), ...extra };
 }
+
+test("色ごとの直近90日の候補を回数順にし、ほかの色を混ぜない", () => {
+  const events = [
+    ev("a", "a", "2026-11-20T10:00", "2026-11-20T11:00", { colorId: "1", subcategory: "読書", people: ["友人"] }),
+    ev("b", "b", "2026-11-21T10:00", "2026-11-21T11:00", { colorId: "1", subcategory: "読書", people: ["友人"] }),
+    ev("c", "c", "2026-11-22T10:00", "2026-11-22T11:00", { colorId: "1", subcategory: "散歩", people: ["知人"] }),
+    ev("d", "d", "2026-11-22T10:00", "2026-11-22T11:00", { colorId: "2", subcategory: "仕事" }),
+    ev("old", "old", "2026-01-01T10:00", "2026-01-01T11:00", { colorId: "1", subcategory: "古い候補" }),
+  ];
+  assert.deepEqual(colorSuggestions(events, "1", "2026-11-23", (event) => event.subcategory ? [event.subcategory] : []), ["読書", "散歩"]);
+  assert.deepEqual(colorSuggestions(events, "1", "2026-11-23", (event) => event.people), ["友人", "知人"]);
+});
+
+test("さっきと同じ場所は同日・前の実績だけを拾う", () => {
+  const events = [
+    ev("yesterday", "昨日", "2026-11-21T19:00", "2026-11-21T20:00", { places: ["家"] }),
+    ev("early", "前", "2026-11-22T09:00", "2026-11-22T10:00", { places: ["家"] }),
+    ev("late", "直前", "2026-11-22T11:00", "2026-11-22T12:00", { places: ["外出先＞公園", "移動＞徒歩"] }),
+    ev("future", "後", "2026-11-22T14:00", "2026-11-22T15:00", { places: ["職場"] }),
+  ];
+  assert.deepEqual(previousActualPlaces(events, "2026-11-22T13:00", []), ["外出先＞公園", "移動＞徒歩"]);
+  assert.deepEqual(previousActualPlaces(events, "2026-11-22T13:00", ["外出先＞公園", "移動＞徒歩"]), []);
+  assert.deepEqual(previousActualPlaces([...events, ev("empty", "場所なし", "2026-11-22T12:30", "2026-11-22T12:45")], "2026-11-22T13:00", []), []);
+});
 
 test("終了日の自動翌日化：終了時刻が開始より前なら翌日", () => {
   assert.equal(deriveEndDate("2026-10-08", "23:30", "06:00"), "2026-10-09");

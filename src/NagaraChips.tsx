@@ -14,6 +14,7 @@ interface Props {
   eventEnd: string;
   /** 固定候補（履歴候補より先に出す） */
   fixed?: string[];
+  priority?: string[];
   /** 部分的な時間を指定できるか（繰り返しルールではイベント全体だけ） */
   allowTime?: boolean;
 }
@@ -23,13 +24,15 @@ function chipTime(d: NagaraDraft): string {
 }
 
 /** イベントの基本画面のながら欄：ラベルを入力して追加するチップ式。チップをタップすると時間（任意）を設定できる */
-export default function NagaraChips({ drafts, onChange, suggestions, eventStart, eventEnd, fixed = [], allowTime = true }: Props) {
+export default function NagaraChips({ drafts, onChange, suggestions, eventStart, eventEnd, fixed = [], priority = [], allowTime = true }: Props) {
   const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
   const add = (value: string) => {
     const label = value.trim();
     setText("");
+    setOpen(false);
     if (label === "") return;
     // 時間なし（イベント全体）の同名がすでにあれば追加しない
     if (drafts.some((d) => d.label === label && d.start === null)) return;
@@ -42,7 +45,7 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
     if (selected === key) setSelected(null);
   };
 
-  const quick = quickCandidates(fixed, suggestions, drafts.map((d) => d.label));
+  const quick = quickCandidates([...priority, ...fixed], suggestions, drafts.map((d) => d.label));
   const sel = drafts.find((d) => d.key === selected) ?? null;
 
   return (
@@ -70,14 +73,7 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
       )}
       {allowTime && sel && (
         <div className="nagara-time">
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={sel.start !== null}
-              onChange={(e) => update(sel.key, e.target.checked ? { start: eventStart, end: eventEnd } : { start: null, end: null })}
-            />
-            時間を指定（オフ＝イベント全体）
-          </label>
+          <span className="field-label">時間を指定</span><div className="segmented" role="group" aria-label="ながらの時間"><button type="button" className={sel.start === null ? "on" : ""} aria-pressed={sel.start === null} onClick={() => update(sel.key, { start: null, end: null })}>全体</button><button type="button" className={sel.start !== null ? "on" : ""} aria-pressed={sel.start !== null} onClick={() => update(sel.key, { start: eventStart, end: eventEnd })}>時間を指定</button></div>
           {sel.start !== null && sel.end !== null && (
             <div className="time-row">
               <input
@@ -99,7 +95,8 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
           )}
         </div>
       )}
-      <div className="chip-add">
+      <div className="quick-list">{quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>{s}</button>)}<button type="button" className="quick" aria-label="ながらを新しく追加" onClick={() => setOpen((value) => !value)}>＋</button></div>
+      {open && <div className="chip-add">
         <input
           type="text"
           value={text}
@@ -113,15 +110,10 @@ export default function NagaraChips({ drafts, onChange, suggestions, eventStart,
           }}
         />
         <button type="button" className="secondary-btn small" onClick={() => add(text)} disabled={text.trim() === ""}>追加</button>
-      </div>
+      </div>}
       <datalist id="nagara-label-suggestions">
         {suggestions.map((s) => <option key={s} value={s} />)}
       </datalist>
-      {quick.length > 0 && (
-        <div className="quick-list">
-          {quick.map((s) => <button key={s} type="button" className="quick" onClick={() => add(s)}>＋{s}</button>)}
-        </div>
-      )}
     </div>
   );
 }

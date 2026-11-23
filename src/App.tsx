@@ -778,8 +778,7 @@ export default function App() {
 
       {bedtimeInfo && (
         <div className="bedtime-summary">
-          {viewMode === "week" && "今日・"}就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}
-          {bedtimeInfo.plannedMinutes > 0 && <>・予定 {formatDuration(bedtimeInfo.plannedMinutes)}</>}
+          {viewMode === "week" && "今日・"}{bedtimeInfo.passed ? "就寝予定を過ぎています" : bedtimeInfo.nextPlan ? bedtimeInfo.nextPlan.ongoing ? <>{bedtimeInfo.nextPlan.title} あと{formatDuration(bedtimeInfo.nextPlan.remainingMinutes)}</> : <>次の予定まで あと{formatDuration(bedtimeInfo.nextPlan.remainingMinutes)}（{bedtimeInfo.nextPlan.title}）</> : <>就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}</>}
         </div>
       )}
 

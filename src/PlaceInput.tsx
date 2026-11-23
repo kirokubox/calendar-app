@@ -11,15 +11,18 @@ interface Props {
   suggestions: string[];
   fixed: string[];
   listId: string;
+  priority?: string[];
+  previous?: string[];
 }
 
 /**
  * 場所・移動の入力：大分類（家・職場・作業場・飲食店・外出先・移動）を選び、詳しい名前を自由に入れて追加する。
  * 1件は「大分類＞名前」の文字で持つ（大分類だけ・名前だけでもよい）。順番は上下で入れ替えられる。
  */
-export default function PlaceInput({ values, onChange, suggestions, fixed, listId }: Props) {
+export default function PlaceInput({ values, onChange, suggestions, fixed, listId, priority = [], previous = [] }: Props) {
   const [kind, setKind] = useState<PlaceKind | null>(null);
   const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
   const [activeChip, setActiveChip] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -27,6 +30,7 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
     if (value.trim() === "") return;
     onChange(addChipValue(values, value));
     setText("");
+    setOpen(false);
     setKind(null);
   };
   // 候補から「飲食店＞サイゼリヤ」のような大分類つきを選んだときは、そのまま使う
@@ -40,17 +44,18 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
     if (parsePlace(s).kind) add(s);
     else if (kind) add(formatPlace(kind, s));
     else {
+      setOpen(true);
       setText(s);
       inputRef.current?.focus();
     }
   };
 
-  const quick = quickCandidates(fixed, suggestions, values);
+  const quick = quickCandidates([...priority, ...fixed], suggestions, values);
   const canAdd = kind !== null || text.trim() !== "";
 
   return (
     <div className="chip-input place-input">
-      <span className="field-label">場所・移動（順番あり）</span>
+      <span className="field-label">場所・移動</span>
       {values.length > 0 && (
         <ul className="chip-list">
           {values.map((v, i) => (
@@ -72,7 +77,8 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
           </button>
         ))}
       </div>
-      <div className="chip-add">
+      <div className="quick-list place-quick-list">{previous.length > 0 && <button type="button" className="quick" onClick={() => onChange([...values, ...previous])}>さっきと同じ</button>}{quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>{s}</button>)}<button type="button" className="quick" aria-label="場所を新しく追加" onClick={() => setOpen((value) => !value)}>＋</button></div>
+      {open && <div className="chip-add">
         <input
           ref={inputRef}
           type="text"
@@ -91,15 +97,10 @@ export default function PlaceInput({ values, onChange, suggestions, fixed, listI
           }}
         />
         <button type="button" className="secondary-btn small" onClick={addDraft} disabled={!canAdd}>追加</button>
-      </div>
+      </div>}
       <datalist id={listId}>
         {suggestions.map((s) => <option key={s} value={s} />)}
       </datalist>
-      {quick.length > 0 && (
-        <div className="quick-list place-quick-list">
-          {quick.map((s) => <button key={s} type="button" className="quick" onPointerDown={(e) => e.preventDefault()} onClick={() => pickQuick(s)}>＋{s}</button>)}
-        </div>
-      )}
     </div>
   );
 }

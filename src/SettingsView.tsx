@@ -229,11 +229,10 @@ export default function SettingsView({
       <div className="settings-body">
         <section>
           <h2>予定だけで使う</h2>
-          <label className="year-routine-toggle"><input type="checkbox" checked={settings.planOnly === true} disabled={busy} onChange={(e) => {
-            const checked = e.target.checked;
+          <div className="view-switch"><span>予定だけで使う</span><div className="segmented" role="group" aria-label="予定だけで使う">{([false, true] as const).map((checked) => <button key={String(checked)} type="button" className={settings.planOnly === checked ? "on" : ""} aria-pressed={settings.planOnly === checked} disabled={busy} onClick={() => {
             setBusy(true);
             void onSaveSettings({ ...settings, planOnly: checked }).then(() => setPlanOnlyMessage("保存しました")).catch((err) => setPlanOnlyMessage(err instanceof Error ? err.message : "保存できませんでした")).finally(() => setBusy(false));
-          }} />予定だけで使う</label>
+          }}>{checked ? "オン" : "オフ"}</button>)}</div></div>
           <p className="hint">オンにすると実績・ながら・マーカーの入力を隠し、振り返りはキャンセルしていない予定で数えます。オフに戻すと元の表示に戻ります。</p>
           {planOnlyMessage && <p className="hint" role="status">{planOnlyMessage}</p>}
         </section>
@@ -320,10 +319,10 @@ export default function SettingsView({
 
         <section>
           <h2>就寝予定の時刻</h2>
-          <p className="hint">日表示で今日を開いたときと、今日を含む週を週表示で開いたときに、就寝までの残り時間を出します。0:00〜4:59は翌日の未明として扱います。</p>
+          <p className="hint">明日が休み（土日・祝日・有休）なら休日前の時刻を使います。0:00〜4:59は前の日の夜の続きです。</p>
           <div className="bedtime-settings">
-            <label><span>平日</span><input type="time" value={weekdayBedtime} onChange={(e) => { setWeekdayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
-            <label><span>休日（土日・祝日）</span><input type="time" value={holidayBedtime} onChange={(e) => { setHolidayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
+            <label><span>仕事前</span><input type="time" value={weekdayBedtime} onChange={(e) => { setWeekdayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
+            <label><span>休日前</span><input type="time" value={holidayBedtime} onChange={(e) => { setHolidayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
           </div>
           <div className="inline-actions">
             <button type="button" className="primary-btn" onClick={saveBedtimes} disabled={busy}>就寝予定を保存</button>

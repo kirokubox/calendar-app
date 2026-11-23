@@ -52,7 +52,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
   const trendBars = useMemo(() => kind === "year" ? monthlyTrend(stackedBars) : stackedBars, [kind, stackedBars]);
   const months = useMemo(() => kind === "year" ? yearMonths(stats, settings) : [], [kind, stats, settings]);
   const topPeople = useMemo(() => kind === "year" ? yearPeople(reviewEvents, period, cutoff, nowLocal, includeRoutine, settings) : [], [kind, reviewEvents, period, cutoff, nowLocal, includeRoutine, settings]);
-  const topPlaces = useMemo(() => kind === "year" ? yearPlaces(stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine) : [], [kind, stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine]);
+  const topPlaces = useMemo(() => kind === "year" ? yearPlaces(stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine, settings) : [], [kind, stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine, settings]);
   const travel = useMemo(() => travelPairSummaries(markers, period.start, period.end), [markers, period]);
   const nagaraBars = useMemo(() => stats.perDay.map((d) => ({
     date: d.date,
@@ -119,7 +119,8 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
         </section>}
         {kind === "year" && <section>
           <h2>今年いちばん長く一緒にいた人・場所</h2>
-          <label className="year-routine-toggle"><input type="checkbox" checked={includeRoutine} onChange={(e) => setIncludeRoutine(e.target.checked)} />仕事・家・職場・移動も含める</label>
+          <p className="hint">仕事・通勤・家・職場・移動を除きます。</p>
+          <div className="segmented" role="group" aria-label="仕事・通勤などを含めるか"><button type="button" className={!includeRoutine ? "on" : ""} aria-pressed={!includeRoutine} onClick={() => setIncludeRoutine(false)}>除く</button><button type="button" className={includeRoutine ? "on" : ""} aria-pressed={includeRoutine} onClick={() => setIncludeRoutine(true)}>含める</button></div>
           <h3>人の上位10件</h3>
           {topPeople.length === 0 ? <p className="hint">この条件の記録はありません。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>人</th><th>時間</th><th>日数</th></tr></thead><tbody>
             {topPeople.map((r) => <tr key={r.name}><td>{r.name}</td><td>{formatDuration(r.minutes)}</td><td>{r.days}日</td></tr>)}
