@@ -2,9 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { COLOR_KEYS, FIXED_MARKERS, FIXED_NAGARA, HOUR_HEIGHT, LANE_WIDTH, WEEK_HOUR_HEIGHT, defaultSettings } from "./constants";
 import {
   addDays, addMinutes, addMonths, dateKeyOf, diffMinutes, formatDayLabel, formatMonthLabel, formatShortDate, formatWeekRangeLabel,
-  startOfMonth, startOfWeek, timePart, toLocal, weekDayKeys, weekendClass,
+  joinLocal, startOfMonth, startOfWeek, timePart, toLocal, weekDayKeys, weekendClass,
 } from "./dateUtils";
-import { bedtimeSummary } from "./bedtimeLogic";
+import { bedtimeSummary, nextPlanInfo } from "./bedtimeLogic";
 import { displayTitle, rangeForPlusButton, rangeFromTap, type Range } from "./eventLogic";
 import { allDayEventsOn } from "./layout";
 import { markerCandidates, markersForDay, nextCommuteMarker } from "./markerLogic";
@@ -212,11 +212,15 @@ export default function App() {
   const markerLabels = useMemo(() => markerCandidates(FIXED_MARKERS, markers), [markers]);
   const nextMarkerLabel = useMemo(() => nextCommuteMarker(markers, todayKey), [markers, todayKey]);
   // 日表示は今日を開いているとき、週表示は今日を含む週のとき（2026-11-21 本人「週表示でしか基本使ってない」）
+  const showsToday = (viewMode === "day" && dayKey === todayKey) || (viewMode === "week" && weekKeys.includes(todayKey));
   const bedtimeInfo = useMemo(
-    () => !settings.planOnly && ((viewMode === "day" && dayKey === todayKey) || (viewMode === "week" && weekKeys.includes(todayKey)))
-      ? bedtimeSummary(events, settings, todayKey, nowLocal)
-      : null,
-    [dayKey, events, nowLocal, settings, todayKey, viewMode, weekKeys],
+    () => !settings.planOnly && showsToday ? bedtimeSummary(events, settings, todayKey, nowLocal) : null,
+    [events, nowLocal, settings, showsToday, todayKey],
+  );
+  // 予定だけで使うときは就寝を使わないので、今日のうちの「次の予定まで」だけを出す（2026-11-23 本人「する」）
+  const planOnlyNext = useMemo(
+    () => settings.planOnly && showsToday ? nextPlanInfo(events, nowLocal, joinLocal(addDays(todayKey, 1), "00:00")) : null,
+    [events, nowLocal, settings.planOnly, showsToday, todayKey],
   );
   const sessionLabels = useMemo(() => {
     const busy = new Set(running.map((n) => n.label));
@@ -782,12 +786,18 @@ export default function App() {
           {viewMode === "week" && "今日・"}{bedtimeInfo.passed ? "就寝予定を過ぎています" : bedtimeInfo.nextPlan ? bedtimeInfo.nextPlan.ongoing ? <>{bedtimeInfo.nextPlan.title} あと{formatDuration(bedtimeInfo.nextPlan.remainingMinutes)}</> : <>次の予定まで あと{formatDuration(bedtimeInfo.nextPlan.remainingMinutes)}（{bedtimeInfo.nextPlan.title}）</> : <>就寝まで あと{formatDuration(bedtimeInfo.remainingMinutes)}</>}
         </div>
       )}
+      {planOnlyNext && (
+        <div className="bedtime-summary">
+          {viewMode === "week" && "今日・"}{planOnlyNext.ongoing ? <>{planOnlyNext.title} あと{formatDuration(planOnlyNext.remainingMinutes)}</> : <>次の予定まで あと{formatDuration(planOnlyNext.remainingMinutes)}（{planOnlyNext.title}）</>}
+        </div>
+      )}
 
       {loaded && events.length === 0 && nagara.length === 0 && markers.length === 0 && (
         <WelcomeCard
           onAdd={onPlus}
           onOpenReview={() => { setReviewAnchor(dayKey); setView("review"); }}
           onOpenSettings={() => setView("settings")}
+          planOnly={settings.planOnly === true}
         />
       )}
 

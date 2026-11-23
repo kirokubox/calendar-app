@@ -1,5 +1,6 @@
 // 検索の純粋ロジック：イベント・セッション・マーカーを横断して絞り込み、前回日と回数を出す。
 import { datePart, diffDays, diffMinutes } from "./dateUtils.js";
+import { canonicalMarkerLabel } from "./markerLogic.js";
 import { categoryName, colorKeyOf, parentOf } from "./reviewLogic.js";
 import type { CalendarEvent, Marker, Nagara, Settings } from "./types.js";
 
@@ -88,7 +89,8 @@ export function searchAll(events: CalendarEvent[], nagara: Nagara[], markers: Ma
     }
     if (want("title")) {
       for (const m of markers) {
-        if (!inRange(m.at, null, q) || !matches([m.label], words)) continue;
+        // 名前を変えた古いマーカー（家を出た）も、今の名前（外出）で見つかるようにする
+        if (!inRange(m.at, null, q) || !matches([m.label, canonicalMarkerLabel(m.label)], words)) continue;
         hits.push({ type: "marker", id: m.id, start: m.at, end: null, marker: m });
       }
     }

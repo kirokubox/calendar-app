@@ -121,7 +121,7 @@ export interface RecurrenceRule {
   removedDates: string[];
 }
 
-/** 時刻だけの記録（開場・家を出た など）。時間は塗らず、集計にも入れない */
+/** 時刻だけの記録（開場・外出 など）。時間は塗らず、集計にも入れない */
 export interface Marker {
   id: string;
   label: string;

@@ -79,7 +79,7 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
   out.push("  - 明細の「ながら」列の（セッション：〜）は、そのイベントの時間に重なっていたセッション。イベントごとにながらを入れ直していなくても、ここから読める");
   out.push("  - 場所・移動は、イベントの場所欄（電車・徒歩などの移動手段を含む）と場所セッションから数える。場所が複数あるイベントは内訳が分からないので、別の列に分ける");
   out.push("  - 場所欄の1件は「大分類＞詳しい名前」（例：飲食店＞サイゼリヤ、移動＞電車）か大分類だけ（例：家）。大分類は 家・職場・作業場（作業をしに行く場所）・飲食店・外出先（作業以外をしに行く場所）・移動 の6つで、本人が入力のたびに選ぶ。「＞」のない場所は大分類を付ける前の記録（その場所の種類は名前から推測しない）");
-  out.push("  - マーカーは時刻だけの記録（家を出た・目的地着など）。時間構成には足さない。マーカーが無いことは「しなかった」ではなく「時刻未記録」");
+  out.push("  - マーカーは時刻だけの記録（外出・目的地着など）。時間構成には足さない。マーカーが無いことは「しなかった」ではなく「時刻未記録」");
   out.push("  - 日ごとの明細は実績・不明、ながら・場所セッション、マーカーだけ。予定は「3. 予定」と「4. キャンセルと予定の変更」に分けて載せる（予定を実績として読まない）");
   out.push("  - 明細の「予定」列は、その実績が対応する予定（予定通り・実績を入力で記録したもの）");
   out.push("  - 数値は事実の記録であり、良し悪しの評価は含まない。集中度・理解度・楽しさは時間からは分からない");
@@ -264,8 +264,10 @@ export function buildReviewMarkdown(input: MarkdownInput): string {
     "",
   );
   out.push("### 移動（マーカーの組）", "");
-  out.push(...table(["組", "回数", "合計", "平均", "最短", "最長"], travelPairSummaries(markers, period.start, period.end).map((r) => [
+  out.push("- ふだん＝直近90日の回の中央値。その1.5倍を超えた回を「寄り道あり」として分ける（直近90日が5回未満なら分けない）。回数〜最長はふだんの回だけ", "");
+  out.push(...table(["組", "回数", "合計", "平均", "最短", "最長", "寄り道あり（回数・平均）"], travelPairSummaries(markers, period.start, period.end).map((r) => [
     r.name, String(r.count), formatDuration(r.total), formatDuration(r.average), formatDuration(r.shortest), formatDuration(r.longest),
+    r.detourCount > 0 ? `${r.detourCount}回・${formatDuration(r.detourAverage)}` : "—",
   ])), "");
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }

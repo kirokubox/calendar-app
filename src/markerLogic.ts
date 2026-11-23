@@ -3,12 +3,21 @@ import { addDays, datePart, diffMinutes, isLocalDateTime, joinLocal, timeToMinut
 import { isHoliday } from "./holidays.js";
 import type { Marker } from "./types.js";
 
-export const COMMUTE_MARKERS = ["家を出た", "会社着", "会社発", "帰宅"] as const;
+/** 名前を変えたマーカーの、古い名前 → 今の名前（保存されている名前は書き換えず、数えるときだけ同じものとして扱う） */
+export const MARKER_ALIASES: Readonly<Record<string, string>> = { 家を出た: "外出" };
+
+/** 古い名前を今の名前へそろえる（前後の空白は除く） */
+export function canonicalMarkerLabel(label: string): string {
+  const trimmed = label.trim();
+  return MARKER_ALIASES[trimmed] ?? trimmed;
+}
+
+export const COMMUTE_MARKERS = ["外出", "会社着", "会社発", "帰宅"] as const;
 
 export const TRAVEL_PAIRS = [
-  { key: "toWork", name: "行きの通勤", start: "家を出た", end: "会社着" },
+  { key: "toWork", name: "行きの通勤", start: "外出", end: "会社着" },
   { key: "fromWork", name: "帰りの通勤", start: "会社発", end: "帰宅" },
-  { key: "outward", name: "外出の行き", start: "家を出た", end: "目的地着" },
+  { key: "outward", name: "外出の行き", start: "外出", end: "目的地着" },
   { key: "return", name: "外出の帰り", start: "目的地発", end: "帰宅" },
 ] as const;
 
@@ -19,10 +28,11 @@ export function pairTravelMarkers(markers: Marker[]): TravelPair[] {
   const pending = new Map<TravelPair["key"], Marker>();
   const result: TravelPair[] = [];
   for (const marker of sortMarkers(markers)) {
-    if (TRAVEL_PAIRS.some((pair) => pair.start === marker.label)) pending.clear();
+    const label = canonicalMarkerLabel(marker.label);
+    if (TRAVEL_PAIRS.some((pair) => pair.start === label)) pending.clear();
     for (const pair of TRAVEL_PAIRS) {
-      if (marker.label === pair.start) pending.set(pair.key, marker);
-      else if (marker.label === pair.end) {
+      if (label === pair.start) pending.set(pair.key, marker);
+      else if (label === pair.end) {
         const start = pending.get(pair.key);
         pending.delete(pair.key);
         if (!start) continue;
@@ -39,14 +49,49 @@ export function pairTravelMarkers(markers: Marker[]): TravelPair[] {
   return result;
 }
 
+/** 「ふだん」を決めるのに使う日数（期間の終わりから遡る） */
+export const TRAVEL_USUAL_DAYS = 90;
+/** 「ふだん」を決めるのに必要な回数。これより少なければ寄り道を分けない */
+export const TRAVEL_USUAL_MIN_COUNT = 5;
+/** ふだん（中央値）のこの倍を超えたら「寄り道あり」 */
+export const TRAVEL_DETOUR_RATIO = 1.5;
+
+export interface TravelRow extends TravelPair { detour: boolean }
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function stats(rows: TravelPair[]) {
+  const total = rows.reduce((sum, p) => sum + p.minutes, 0);
+  return {
+    count: rows.length,
+    total,
+    average: rows.length ? total / rows.length : 0,
+    shortest: rows.length ? Math.min(...rows.map((p) => p.minutes)) : 0,
+    longest: rows.length ? Math.max(...rows.map((p) => p.minutes)) : 0,
+  };
+}
+
+/**
+ * 組ごとの集計。ふだん＝期間の終わりまでの直近90日の回の中央値。その1.5倍を超えた回は「寄り道あり」として分ける。
+ * 直近90日の回が5回未満なら分けない（usual は null）。count〜longest はふだんの回だけ、detour* は寄り道ありの回。
+ */
 export function travelPairSummaries(markers: Marker[], from: string, to: string) {
-  const pairs = pairTravelMarkers(markers).filter((p) => p.start.at >= `${from}T00:00` && p.start.at < `${to}T00:00`);
+  const all = pairTravelMarkers(markers);
+  const usualFrom = `${addDays(to, -TRAVEL_USUAL_DAYS)}T00:00`;
   return TRAVEL_PAIRS.map((def) => {
-    const rows = pairs.filter((p) => p.key === def.key);
-    const total = rows.reduce((sum, p) => sum + p.minutes, 0);
-    return { ...def, rows, count: rows.length, total, average: rows.length ? total / rows.length : 0,
-      shortest: rows.length ? Math.min(...rows.map((p) => p.minutes)) : 0,
-      longest: rows.length ? Math.max(...rows.map((p) => p.minutes)) : 0 };
+    const ofPair = all.filter((p) => p.key === def.key);
+    const recent = ofPair.filter((p) => p.start.at >= usualFrom && p.start.at < `${to}T00:00`).map((p) => p.minutes);
+    const usual = recent.length >= TRAVEL_USUAL_MIN_COUNT ? median(recent) : null;
+    const rows: TravelRow[] = ofPair
+      .filter((p) => p.start.at >= `${from}T00:00` && p.start.at < `${to}T00:00`)
+      .map((p) => ({ ...p, detour: usual !== null && p.minutes > usual * TRAVEL_DETOUR_RATIO }));
+    const normal = stats(rows.filter((r) => !r.detour));
+    const detour = stats(rows.filter((r) => r.detour));
+    return { ...def, rows, usual, ...normal, detourCount: detour.count, detourAverage: detour.average };
   });
 }
 
@@ -106,7 +151,8 @@ export function markerCandidates(fixed: string[], markers: Marker[], historyCoun
   for (const m of sorted) {
     if (added >= historyCount) break;
     const label = m.label.trim();
-    if (label === "" || out.includes(label)) continue;
+    // 名前を変えた古い名前（家を出た）は、今の名前と二重にならないよう候補に出さない
+    if (label === "" || out.includes(label) || out.includes(canonicalMarkerLabel(label))) continue;
     out.push(label);
     added++;
   }
@@ -115,13 +161,13 @@ export function markerCandidates(fixed: string[], markers: Marker[], historyCoun
 
 /** 今日の通勤マーカーから、次に記録する候補を1つ返す。休日・帰宅後は候補なし。 */
 export function nextCommuteMarker(markers: Marker[], todayKey: string): string | null {
-  const todayCommute = sortMarkers(markers.filter((m) => datePart(m.at) === todayKey && (COMMUTE_MARKERS as readonly string[]).includes(m.label)));
+  const todayCommute = sortMarkers(markers.filter((m) => datePart(m.at) === todayKey && (COMMUTE_MARKERS as readonly string[]).includes(canonicalMarkerLabel(m.label))));
   if (todayCommute.length === 0) {
     const day = new Date(`${todayKey}T00:00:00`).getDay();
     return day === 0 || day === 6 || isHoliday(todayKey) ? null : COMMUTE_MARKERS[0];
   }
   const last = todayCommute[todayCommute.length - 1];
-  const index = COMMUTE_MARKERS.indexOf(last.label as typeof COMMUTE_MARKERS[number]);
+  const index = COMMUTE_MARKERS.indexOf(canonicalMarkerLabel(last.label) as typeof COMMUTE_MARKERS[number]);
   return index >= 0 && index < COMMUTE_MARKERS.length - 1 ? COMMUTE_MARKERS[index + 1] : null;
 }
 

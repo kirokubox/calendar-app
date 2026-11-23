@@ -36,7 +36,7 @@ test("設定：廃止した4日表示は日表示へ移し、知らない値は�
 });
 
 test("通勤マーカー：平日の最初と、最後に記録した組の次を返す", () => {
-  assert.equal(nextCommuteMarker([], "2026-11-16"), "家を出た");
+  assert.equal(nextCommuteMarker([], "2026-11-16"), "外出");
   assert.equal(nextCommuteMarker([mk("a", "家を出た", "2026-11-16T08:00")], "2026-11-16"), "会社着");
   assert.equal(nextCommuteMarker([
     mk("a", "家を出た", "2026-11-16T08:00"),

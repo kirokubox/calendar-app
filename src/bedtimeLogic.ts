@@ -21,6 +21,19 @@ export function bedtimeDateTime(dayKey: string, time: string): string {
   return joinLocal(time < "05:00" ? addDays(dayKey, 1) : dayKey, time);
 }
 
+export type NextPlan = BedtimeSummary["nextPlan"];
+
+/**
+ * 今から until までに関わる予定（キャンセル・終日を除く）から、最中の予定（あれば終わりまで）か、次に始まる予定（始まりまで）を返す。
+ * 就寝までの1行と、予定だけで使うときの「次の予定まで」（until＝今日の終わり）で使う。
+ */
+export function nextPlanInfo(events: CalendarEvent[], nowLocal: string, until: string): NextPlan {
+  const plans = events.filter((e) => e.kind === "plan" && e.status !== "cancelled" && !e.allDay && e.start < until && e.end > nowLocal).sort((a, b) => a.start.localeCompare(b.start));
+  const ongoing = plans.filter((e) => e.start <= nowLocal).sort((a, b) => a.end.localeCompare(b.end))[0];
+  const next = ongoing ?? plans[0];
+  return next ? { title: next.title, remainingMinutes: diffMinutes(nowLocal, ongoing ? ongoing.end : next.start), ongoing: Boolean(ongoing) } : null;
+}
+
 /** 今日の就寝予定までの残り時間と、重なりを二重計上しない予定時間。 */
 export function bedtimeSummary(events: CalendarEvent[], settings: Settings, todayKey: string, nowLocal: string): BedtimeSummary | null {
   const nightKey = nowLocal.slice(11, 16) < "05:00" ? addDays(todayKey, -1) : todayKey;
@@ -31,10 +44,7 @@ export function bedtimeSummary(events: CalendarEvent[], settings: Settings, toda
   const bedtime = bedtimeDateTime(nightKey, time);
   if (bedtime <= nowLocal) return { bedtime, remainingMinutes: 0, plannedMinutes: 0, passed: true, nextPlan: null };
 
-  const plans = events.filter((e) => e.kind === "plan" && e.status !== "cancelled" && !e.allDay && e.start < bedtime && e.end > nowLocal).sort((a, b) => a.start.localeCompare(b.start));
-  const ongoing = plans.filter((e) => e.start <= nowLocal).sort((a, b) => a.end.localeCompare(b.end))[0];
-  const next = ongoing ?? plans[0];
-  const nextPlan = next ? { title: next.title, remainingMinutes: diffMinutes(nowLocal, ongoing ? ongoing.end : next.start), ongoing: Boolean(ongoing) } : null;
+  const nextPlan = nextPlanInfo(events, nowLocal, bedtime);
 
   const intervals = events
     .filter((e) => e.kind === "plan" && e.status !== "cancelled" && !e.allDay && e.start < bedtime && e.end > nowLocal)

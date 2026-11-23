@@ -61,6 +61,7 @@
     "tests/recurrence.test.ts",
     "tests/yearAndTravel.test.ts",
     "tests/reviewSections.test.ts",
+    "tests/reviewFixes.test.ts",
     "tests/photoBackup.test.ts"
   ]
 }

@@ -74,11 +74,13 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
 
   const move = (dir: 1 | -1) => onChange(kind, shiftPeriod(period, dir).start);
 
+  // 予定だけで使うときは「記録していない」ではなく「予定が無い」時間なので、名前だけ変える（数え方は同じ）
+  const unrecordedLabel = settings.planOnly ? "予定なし" : "未記録";
   const slices: PieSlice[] = drilled
     ? drilled.children.map((c) => ({ key: c.key, label: c.name, value: c.minutes, color: c.color }))
     : [
         ...breakdown.parents.map((p) => ({ key: p.name, label: p.name, value: p.minutes, color: PARENT_COLORS[p.name] })),
-        { key: "未記録", label: "未記録", value: breakdown.unrecorded.minutes, color: PARENT_COLORS["未記録"] },
+        { key: "未記録", label: unrecordedLabel, value: breakdown.unrecorded.minutes, color: PARENT_COLORS["未記録"] },
       ];
 
   const nameOf = (key: string) => (key === "none" ? "主行動なし" : categoryName(key, settings));
@@ -119,7 +121,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
             {months.map((m) => <button type="button" key={m.month} className="year-month" onClick={() => onChange("month", `${m.month}-01`)} aria-label={`${Number(m.month.slice(5))}月の振り返りへ`}>
               <span className="year-month-bar">{[...PARENT_CATEGORIES, "未記録" as const].map((name) => {
                 const minutes = name === "未記録" ? m.unrecorded : m.parents[name];
-                return <i key={name} title={`${name} ${formatDuration(minutes)}`} style={{ height: `${m.total ? minutes / m.total * 100 : 0}%`, background: PARENT_COLORS[name] }} />;
+                return <i key={name} title={`${name === "未記録" ? unrecordedLabel : name} ${formatDuration(minutes)}`} style={{ height: `${m.total ? minutes / m.total * 100 : 0}%`, background: PARENT_COLORS[name] }} />;
               })}</span>
               <span>{Number(m.month.slice(5))}月</span>
             </button>)}
@@ -158,7 +160,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
                   <li key="未記録" className="unrecorded">
                     <span className="share-row">
                       <i className="dot" style={{ background: PARENT_COLORS["未記録"] }} />
-                      <span className="share-name">未記録</span>
+                      <span className="share-name">{unrecordedLabel}</span>
                       <span className="share-val">{formatShare(breakdown.unrecorded.minutes, total)}</span>
                     </span>
                   </li>,
@@ -314,12 +316,12 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
 
         {visible("travel") && <section>
           <h2>移動（マーカーの組）</h2>
-          <p className="hint">対応する始まりと終わりが6時間以内のときだけ数えます。時間構成には含めません。</p>
-          <div className="table-scroll"><table className="data-table"><thead><tr><th>組</th><th>回数</th><th>合計</th><th>平均</th><th>最短</th><th>最長</th></tr></thead><tbody>
-            {travel.map((r) => <tr key={r.key}><td><button type="button" className="person-link" onClick={() => setOpenTravel(openTravel === r.key ? null : r.key)}>{r.name}</button></td><td>{r.count}</td><td>{formatDuration(r.total)}</td><td>{formatDuration(r.average)}</td><td>{formatDuration(r.shortest)}</td><td>{formatDuration(r.longest)}</td></tr>)}
+          <p className="hint">対応する始まりと終わりが6時間以内のときだけ数えます。時間構成には含めません。ふだん（直近90日の真ん中の長さ）の1.5倍を超えた回は「寄り道あり」として分けます。</p>
+          <div className="table-scroll"><table className="data-table"><thead><tr><th>組</th><th>回数</th><th>平均</th><th>最短</th><th>最長</th><th>寄り道あり</th></tr></thead><tbody>
+            {travel.map((r) => <tr key={r.key}><td><button type="button" className="person-link" onClick={() => setOpenTravel(openTravel === r.key ? null : r.key)}>{r.name}</button></td><td>{r.count}</td><td>{formatDuration(r.average)}</td><td>{formatDuration(r.shortest)}</td><td>{formatDuration(r.longest)}</td><td>{r.detourCount > 0 ? `${r.detourCount}回・平均${formatDuration(r.detourAverage)}` : "—"}</td></tr>)}
           </tbody></table></div>
           {travel.filter((r) => r.key === openTravel).map((r) => <div key={r.key} className="table-scroll"><h3>{r.name}：日ごとの一覧</h3><table className="data-table"><thead><tr><th>日付</th><th>時刻</th><th>かかった時間</th></tr></thead><tbody>
-            {r.rows.map((p) => <tr key={p.start.id}><td>{formatShortDate(p.start.at.slice(0, 10))}</td><td>{p.start.at.slice(11)}〜{p.end.at.slice(11)}</td><td>{formatDuration(p.minutes)}</td></tr>)}
+            {r.rows.map((p) => <tr key={p.start.id}><td>{formatShortDate(p.start.at.slice(0, 10))}</td><td>{p.start.at.slice(11)}〜{p.end.at.slice(11)}</td><td>{formatDuration(p.minutes)}{p.detour ? "（寄り道あり）" : ""}</td></tr>)}
           </tbody></table></div>)}
         </section>}
 

@@ -1,6 +1,6 @@
 import type { ParentCategory, PlaceKind, Settings } from "./types.js";
 
-export const APP_VERSION = "0.16.0";
+export const APP_VERSION = "0.17.0";
 export const BACKUP_APP_NAME = "calendar-app";
 export const PHOTO_MAX_EDGE = 1200;
 export const THUMB_MAX_EDGE = 360;
@@ -68,7 +68,7 @@ export const FIXED_PLACES = ["家", "職場", "移動＞電車", "移動＞徒�
 /** 場所の大分類と詳しい名前の区切り */
 export const PLACE_SEP = "＞";
 /** マーカーの固定候補（履歴候補・自由入力と併用） */
-export const FIXED_MARKERS = ["家を出た", "目的地着", "目的地発", "帰宅", "会社着", "会社発"];
+export const FIXED_MARKERS = ["外出", "目的地着", "目的地発", "帰宅", "会社着", "会社発"];
 /** 場所の大分類（イベントの入力で選ぶ） */
 export const PLACE_KINDS: PlaceKind[] = ["家", "職場", "作業場", "飲食店", "外出先", "移動"];
 /** 移動手段とみなす場所（細分類の自動判定と、大分類のない古い場所の判定に使う） */
