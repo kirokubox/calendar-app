@@ -25,6 +25,7 @@
     "src/icsExport.ts",
     "src/reviewLogic.ts",
     "src/yearLogic.ts",
+    "src/reviewSections.ts",
     "src/photoBackup.ts",
     "src/zip.ts",
     "src/reviewMarkdown.ts",
@@ -59,6 +60,7 @@
     "tests/holidays.test.ts",
     "tests/recurrence.test.ts",
     "tests/yearAndTravel.test.ts",
+    "tests/reviewSections.test.ts",
     "tests/photoBackup.test.ts"
   ]
 }

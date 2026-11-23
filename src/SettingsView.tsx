@@ -48,6 +48,18 @@ function displayDateTime(iso: string): string {
   return `${displayDate(local.slice(0, 10))} ${timePart(local)}`;
 }
 
+type SettingScreen = "home" | "start" | "week" | "plan" | "labels" | "parents" | "bedtime" | "last" | "recurrence" | "ai" | "ics" | "google" | "backup" | "about";
+const SCREEN_TITLE: Record<SettingScreen, string> = {
+  home: "設定", start: "起動時の表示", week: "週の始まり", plan: "予定だけで使う",
+  labels: "色とカテゴリ名", parents: "親カテゴリの割り当て", bedtime: "就寝予定の時刻",
+  last: "前回からの日数", recurrence: "繰り返し", ai: "AI用書き出し", ics: ".icsの書き出し",
+  google: "Googleの取り込み", backup: "バックアップ", about: "このアプリについて",
+};
+
+function SettingRow({ label, value, onClick }: { label: string; value?: string; onClick: () => void }) {
+  return <button type="button" className="setting-row" onClick={onClick}><span className="setting-row-name">{label}</span>{value && <span className="setting-row-value">{value}</span>}<Icon name="chevron-right" size={18} /></button>;
+}
+
 export default function SettingsView({
   settings, events, nagara, revisions, recurrences, markers, activeSleep, ruleMessage, onBack, onSaveSettings, onAddRule, onEditRule, onToggleRule, onDeleteRecurrence, onRestore, onImportGoogle,
 }: Props) {
@@ -67,6 +79,7 @@ export default function SettingsView({
   const [busy, setBusy] = useState(false);
   /** 復元のたびに増やし、「前回の一覧」の編集中の内容を読み直す */
   const [restoreCount, setRestoreCount] = useState(0);
+  const [screen, setScreen] = useState<SettingScreen>("home");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const rows: Array<{ key: string; name: string }> = [
@@ -221,13 +234,32 @@ export default function SettingsView({
     <div className="settings">
       <header className="topbar">
         <div className="topbar-row">
-          <button type="button" className="text-btn" onClick={onBack}><Icon name="arrow-left" size={18} />カレンダーへ</button>
-          <h1 className="settings-title">設定</h1>
+          <button type="button" className="text-btn" onClick={screen === "home" ? onBack : () => setScreen("home")}><Icon name="arrow-left" size={18} />{screen === "home" ? "カレンダーへ" : "設定へ"}</button>
+          <h1 className="settings-title">{SCREEN_TITLE[screen]}</h1>
         </div>
       </header>
 
       <div className="settings-body">
-        <section>
+        {screen === "home" && <>
+          <section className="settings-menu"><h2>表示</h2>
+            <SettingRow label="起動時の表示" value={{ day: "日", week: "週", month: "月" }[settings.startView]} onClick={() => setScreen("start")} />
+            <SettingRow label="週の始まり" value={`${weekdayName(settings.weekStartDay)}曜日`} onClick={() => setScreen("week")} />
+            <SettingRow label="予定だけで使う" value={settings.planOnly ? "オン" : "オフ"} onClick={() => setScreen("plan")} />
+          </section>
+          <section className="settings-menu"><h2>記録</h2>
+            <SettingRow label="色とカテゴリ名" onClick={() => setScreen("labels")} />
+            <SettingRow label="親カテゴリの割り当て" onClick={() => setScreen("parents")} />
+            <SettingRow label="就寝予定の時刻" value={`仕事前 ${settings.weekdayBedtime ?? "未設定"}・休日前 ${settings.holidayBedtime ?? "未設定"}`} onClick={() => setScreen("bedtime")} />
+            <SettingRow label="前回からの日数の項目" onClick={() => setScreen("last")} />
+            <SettingRow label="AI用書き出し" onClick={() => setScreen("ai")} />
+            <SettingRow label="繰り返し" onClick={() => setScreen("recurrence")} />
+            <SettingRow label="Googleの取り込み" onClick={() => setScreen("google")} />
+            <SettingRow label=".icsの書き出し" onClick={() => setScreen("ics")} />
+          </section>
+          <section className="settings-menu"><h2>バックアップ</h2><SettingRow label="保存と読み込み" onClick={() => setScreen("backup")} /></section>
+          <section className="settings-menu"><h2>このアプリについて</h2><SettingRow label="アプリの情報" onClick={() => setScreen("about")} /></section>
+        </>}
+        {screen === "plan" && <section>
           <h2>予定だけで使う</h2>
           <div className="view-switch"><span>予定だけで使う</span><div className="segmented" role="group" aria-label="予定だけで使う">{([false, true] as const).map((checked) => <button key={String(checked)} type="button" className={settings.planOnly === checked ? "on" : ""} aria-pressed={settings.planOnly === checked} disabled={busy} onClick={() => {
             setBusy(true);
@@ -235,8 +267,8 @@ export default function SettingsView({
           }}>{checked ? "オン" : "オフ"}</button>)}</div></div>
           <p className="hint">オンにすると実績・ながら・マーカーの入力を隠し、振り返りはキャンセルしていない予定で数えます。オフに戻すと元の表示に戻ります。</p>
           {planOnlyMessage && <p className="hint" role="status">{planOnlyMessage}</p>}
-        </section>
-        <section>
+        </section>}
+        {screen === "labels" && <section>
           <h2>色とカテゴリ名</h2>
           <p className="hint">色ごとにカテゴリ名を付けられます。名前を空にすると「他の色」に入ります。</p>
           <ul className="label-list">
@@ -259,9 +291,9 @@ export default function SettingsView({
             <button type="button" className="primary-btn" onClick={saveLabels} disabled={busy}>カテゴリ名を保存</button>
             {labelMessage && <span className="hint">{labelMessage}</span>}
           </div>
-        </section>
+        </section>}
 
-        <section>
+        {screen === "parents" && <section>
           <h2>親カテゴリの割り当て</h2>
           <p className="hint">色ごとに、振り返りで使う親カテゴリ（睡眠・生活・仕事・自由時間・その他）を選びます。</p>
           <ul className="label-list">
@@ -283,9 +315,9 @@ export default function SettingsView({
             <button type="button" className="primary-btn" onClick={saveParents} disabled={busy}>親カテゴリを保存</button>
             {parentMessage && <span className="hint">{parentMessage}</span>}
           </div>
-        </section>
+        </section>}
 
-        <section>
+        {screen === "week" && <section>
           <h2>週の始まり</h2>
           <div className="inline-actions">
             <select
@@ -298,9 +330,9 @@ export default function SettingsView({
             </select>
             {weekMessage && <span className="hint">{weekMessage}</span>}
           </div>
-        </section>
+        </section>}
 
-        <section>
+        {screen === "start" && <section>
           <h2>起動時の表示</h2>
           <div className="inline-actions">
             <select
@@ -315,9 +347,9 @@ export default function SettingsView({
             </select>
             {startMessage && <span className="hint">{startMessage}</span>}
           </div>
-        </section>
+        </section>}
 
-        <section>
+        {screen === "bedtime" && <section>
           <h2>就寝予定の時刻</h2>
           <p className="hint">明日が休み（土日・祝日・有休）なら休日前の時刻を使います。0:00〜4:59は前の日の夜の続きです。</p>
           <div className="bedtime-settings">
@@ -329,26 +361,26 @@ export default function SettingsView({
             <button type="button" className="text-btn small" onClick={() => { setWeekdayBedtime(""); setHolidayBedtime(""); setBedtimeMessage(""); }} disabled={busy}>両方クリア</button>
             {bedtimeMessage && <span className="hint">{bedtimeMessage}</span>}
           </div>
-        </section>
+        </section>}
 
-        <LastItemsSettings key={restoreCount} settings={settings} onSaveSettings={onSaveSettings} />
+        {screen === "last" && <LastItemsSettings key={restoreCount} settings={settings} onSaveSettings={onSaveSettings} />}
 
-        <RecurrenceSettings
+        {screen === "recurrence" && <RecurrenceSettings
           recurrences={recurrences}
           message={ruleMessage}
           onAdd={onAddRule}
           onEdit={onEditRule}
           onToggle={onToggleRule}
           onDelete={onDeleteRecurrence}
-        />
+        />}
 
-        <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} markers={markers} activeSleep={activeSleep} />
+        {screen === "ai" && <AiMarkdownSettings settings={settings} events={events} nagara={nagara} revisions={revisions} markers={markers} activeSleep={activeSleep} />}
 
-        <IcsExportSettings events={events} />
+        {screen === "ics" && <IcsExportSettings events={events} />}
 
-        <GoogleImportSettings events={events} onImport={onImportGoogle} />
+        {screen === "google" && <GoogleImportSettings events={events} onImport={onImportGoogle} />}
 
-        <section>
+        {screen === "backup" && <section>
           <h2>バックアップ</h2>
           <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所、{markers.length} 件のマーカーがあります。</p>
           <div className="inline-actions">
@@ -384,16 +416,16 @@ export default function SettingsView({
               </div>
             </div>
           )}
-        </section>
+        </section>}
 
-        <section>
+        {screen === "about" && <section>
           <h2>このアプリについて</h2>
           <ul className="about">
             <li>データはこの端末のブラウザ内にだけ保存されます。サーバーには送信されません。</li>
             <li>ブラウザのデータ消去や端末の故障で失われることがあるため、定期的に「バックアップを保存」でバックアップしてください。</li>
             <li>バージョン {APP_VERSION}</li>
           </ul>
-        </section>
+        </section>}
       </div>
     </div>
   );

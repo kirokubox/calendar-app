@@ -90,6 +90,8 @@ export function migrateSettings(raw: unknown): Settings {
     holidayBedtime: timeOrNull(raw.holidayBedtime),
     lastItems: migrateLastItems(raw.lastItems),
     planOnly: raw.planOnly === true,
+    ...(Array.isArray(raw.hiddenReviewSections) && raw.hiddenReviewSections.every((key) => typeof key === "string")
+      ? { hiddenReviewSections: raw.hiddenReviewSections as string[] } : {}),
   };
 }
 

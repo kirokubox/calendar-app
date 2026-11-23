@@ -187,6 +187,14 @@ button { cursor: pointer; }
 .settings-title { margin: 0; font-size: var(--kb-fs-l); }
 .settings-body { flex: 1; overflow-y: auto; padding: var(--kb-space-2) var(--kb-space-4) calc(var(--kb-space-5) + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 20px; }
 .settings-body h2 { font-size: 1rem; margin: 12px 0 6px; }
+.settings-menu { margin: 0 calc(-1 * var(--kb-space-4)); }
+.settings-menu h2 { padding: 0 var(--kb-space-4); }
+.setting-row, .review-choice-row, .review-choice-trigger { width: 100%; min-height: 52px; display: flex; align-items: center; gap: var(--kb-space-2); padding: var(--kb-space-2) var(--kb-space-4); border: 0; border-top: 1px solid var(--kb-line); background: transparent; color: inherit; text-align: left; }
+.setting-row:active, .review-choice-row:active, .review-choice-trigger:active { background: var(--kb-surface-2); }
+.setting-row-name, .review-choice-row span:first-child { flex: 1; min-width: 0; }
+.setting-row-value, .review-choice-row span:last-child { color: var(--kb-text-2); font-size: var(--kb-fs-s); text-align: right; }
+.review-routine-filter { display: flex; align-items: center; gap: var(--kb-space-3); flex-wrap: wrap; }
+.review-choice-trigger { font-weight: 700; justify-content: space-between; }
 .label-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .label-list li { display: flex; align-items: center; gap: 8px; }
 .label-list .dot { width: 18px; height: 18px; border-radius: 50%; flex: none; }

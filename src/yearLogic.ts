@@ -41,7 +41,7 @@ export function monthlyTrend(days: StackedDay[]): StackedDay[] {
 
 export function yearPeople(events: CalendarEvent[], period: Period, cutoff: string, nowLocal: string, includeRoutine: boolean, settings: Settings) {
   const selected = includeRoutine ? events : events.filter((e) => !isRoutineEvent(e, period, cutoff, settings));
-  return peopleInPeriod(selected, period, cutoff, nowLocal).slice(0, 10);
+  return peopleInPeriod(selected, period, cutoff, nowLocal);
 }
 
 /** 週・月にも使える、仕事・通勤の除外判定。 */
@@ -78,6 +78,5 @@ export function yearPlaces(stats: ReviewStats, events: CalendarEvent[], nagara: 
   return placeStats.placeTotals
     .filter((p) => includeRoutine || !isRoutinePlace(p.label))
     .map((p) => ({ ...p, days: days.get(p.label)?.size ?? 0 }))
-    .sort((a, b) => b.minutes + b.sharedMinutes - a.minutes - a.sharedMinutes || a.label.localeCompare(b.label, "ja"))
-    .slice(0, 10);
+    .sort((a, b) => b.minutes + b.sharedMinutes - a.minutes - a.sharedMinutes || a.label.localeCompare(b.label, "ja"));
 }

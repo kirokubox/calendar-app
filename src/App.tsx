@@ -656,6 +656,7 @@ export default function App() {
           onChange={(k, a) => { setReviewKind(k); setReviewAnchor(a); }}
           onBack={() => setView("calendar")}
           onOpenEvent={openEvent}
+          onSaveSettings={handleSaveSettings}
           onOpenPerson={(name) => {
             setSearchQuery({ text: name, field: "people", from: "", to: "", kind: settings.planOnly ? "plan" : "actual" });
             setView("search");

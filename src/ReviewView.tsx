@@ -4,9 +4,9 @@ import { formatShortDate } from "./dateUtils";
 import { displayTitle } from "./eventLogic";
 import { Icon } from "./Icon";
 import { travelPairSummaries } from "./markerLogic";
-import { peopleInPeriod } from "./peopleLogic";
 import { monthlyTrend, yearMonths, yearPeople, yearPlaces } from "./yearLogic";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
+import { availableReviewSections, hiddenReviewSections, isReviewSectionVisible } from "./reviewSections";
 import {
   DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
   detailColor, equivalentPreviousCutoff, formatSigned, parseBarTarget, parentOf, periodCutoff, periodLabel, periodOf, planOnlyReviewEvents, shiftPeriod, stackedBarSeries,
@@ -27,16 +27,20 @@ interface Props {
   onOpenEvent: (event: CalendarEvent) => void;
   /** 人の名前を押したとき：その人との記録を検索画面で開く */
   onOpenPerson: (name: string) => void;
+  onSaveSettings: (settings: Settings) => Promise<void>;
 }
 
 const KIND_LABEL: Record<PeriodKind, string> = { week: "週", month: "月", year: "年" };
 
 /** 振り返り画面：時間構成（円グラフ）・前期間との差・棒グラフ・ながら/場所・未確定の予定 */
-export default function ReviewView({ events, nagara, markers, settings, nowLocal, kind, anchor, onChange, onBack, onOpenEvent, onOpenPerson }: Props) {
+export default function ReviewView({ events, nagara, markers, settings, nowLocal, kind, anchor, onChange, onBack, onOpenEvent, onOpenPerson, onSaveSettings }: Props) {
   const [drill, setDrill] = useState<ParentCategory | null>(null);
   const [target, setTarget] = useState<BarTarget>(DEFAULT_BAR_TARGET);
   const [openTravel, setOpenTravel] = useState<string | null>(null);
   const [includeRoutine, setIncludeRoutine] = useState(false);
+  const [showAllPeople, setShowAllPeople] = useState(false);
+  const [showAllPlaces, setShowAllPlaces] = useState(false);
+  const [editingSections, setEditingSections] = useState(false);
 
   const period = useMemo(() => periodOf(kind, anchor, settings.weekStartDay), [kind, anchor, settings.weekStartDay]);
   const reviewEvents = useMemo(() => settings.planOnly ? planOnlyReviewEvents(events) : events, [events, settings.planOnly]);
@@ -51,8 +55,8 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
   const stackedBars = useMemo(() => stackedBarSeries(stats, target, settings), [stats, target, settings]);
   const trendBars = useMemo(() => kind === "year" ? monthlyTrend(stackedBars) : stackedBars, [kind, stackedBars]);
   const months = useMemo(() => kind === "year" ? yearMonths(stats, settings) : [], [kind, stats, settings]);
-  const topPeople = useMemo(() => kind === "year" ? yearPeople(reviewEvents, period, cutoff, nowLocal, includeRoutine, settings) : [], [kind, reviewEvents, period, cutoff, nowLocal, includeRoutine, settings]);
-  const topPlaces = useMemo(() => kind === "year" ? yearPlaces(stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine, settings) : [], [kind, stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine, settings]);
+  const topPeople = useMemo(() => yearPeople(reviewEvents, period, cutoff, nowLocal, includeRoutine, settings), [reviewEvents, period, cutoff, nowLocal, includeRoutine, settings]);
+  const topPlaces = useMemo(() => yearPlaces(stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine, settings), [stats, reviewEvents, reviewNagara, period, cutoff, includeRoutine, settings]);
   const travel = useMemo(() => travelPairSummaries(markers, period.start, period.end), [markers, period]);
   const nagaraBars = useMemo(() => stats.perDay.map((d) => ({
     date: d.date,
@@ -60,7 +64,6 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
       .map((n) => ({ key: n.label, label: n.label, minutes: d.byNagara[n.label] ?? 0, color: detailColor(`nagara:${n.label}`) }))
       .filter((s) => s.minutes > 0),
   })), [stats]);
-  const people = useMemo(() => peopleInPeriod(reviewEvents, period, cutoff, nowLocal), [reviewEvents, period, cutoff, nowLocal]);
   const unconfirmed = useMemo(() => settings.planOnly ? [] : unconfirmedInPeriod(events, period, nowLocal), [events, period, nowLocal, settings.planOnly]);
 
   const total = breakdown.totalMinutes;
@@ -79,6 +82,12 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
       ];
 
   const nameOf = (key: string) => (key === "none" ? "主行動なし" : categoryName(key, settings));
+  const visible = (key: string) => isReviewSectionVisible(settings, key);
+  const toggleSection = (key: string) => {
+    const current = hiddenReviewSections(settings);
+    const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
+    void onSaveSettings({ ...settings, hiddenReviewSections: next });
+  };
 
   return (
     <div className="review">
@@ -117,19 +126,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           </div>
           <p className="hint">月を押すと、その月の振り返りを開きます。未来の月には時間を入れません。</p>
         </section>}
-        {kind === "year" && <section>
-          <h2>今年いちばん長く一緒にいた人・場所</h2>
-          <p className="hint">仕事・通勤・家・職場・移動を除きます。</p>
-          <div className="segmented" role="group" aria-label="仕事・通勤などを含めるか"><button type="button" className={!includeRoutine ? "on" : ""} aria-pressed={!includeRoutine} onClick={() => setIncludeRoutine(false)}>除く</button><button type="button" className={includeRoutine ? "on" : ""} aria-pressed={includeRoutine} onClick={() => setIncludeRoutine(true)}>含める</button></div>
-          <h3>人の上位10件</h3>
-          {topPeople.length === 0 ? <p className="hint">この条件の記録はありません。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>人</th><th>時間</th><th>日数</th></tr></thead><tbody>
-            {topPeople.map((r) => <tr key={r.name}><td>{r.name}</td><td>{formatDuration(r.minutes)}</td><td>{r.days}日</td></tr>)}
-          </tbody></table></div>}
-          <h3>場所の上位10件</h3>
-          {topPlaces.length === 0 ? <p className="hint">この条件の記録はありません。</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th>場所</th><th>その場所だけ</th><th>複数のうち</th><th>日数</th></tr></thead><tbody>
-            {topPlaces.map((r) => <tr key={r.label}><td>{r.label}</td><td>{formatDuration(r.minutes)}</td><td>{formatDuration(r.sharedMinutes)}</td><td>{r.days}日</td></tr>)}
-          </tbody></table></div>}
-        </section>}
+        {(visible("people") || visible("place")) && <div className="review-routine-filter"><span>人・場所</span><div className="segmented" role="group" aria-label="仕事・通勤などを含めるか"><button type="button" className={!includeRoutine ? "on" : ""} aria-pressed={!includeRoutine} onClick={() => { setIncludeRoutine(false); setShowAllPeople(false); setShowAllPlaces(false); }}>除く</button><button type="button" className={includeRoutine ? "on" : ""} aria-pressed={includeRoutine} onClick={() => { setIncludeRoutine(true); setShowAllPeople(false); setShowAllPlaces(false); }}>含める</button></div></div>}
         <section>
           <h2>時間構成{drilled ? `：${drilled.name}` : ""}</h2>
           {drilled && (
@@ -173,7 +170,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           </p>
         </section>
 
-        <section>
+        {visible("diff") && <section>
           <h2>前期間との差</h2>
           <p className="hint">前期間：{periodLabel(prevPeriod)}{partialPeriod ? "（今期と同じ経過時間まで）" : ""}</p>
           <div className="table-scroll">
@@ -193,9 +190,9 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
               </tbody>
             </table>
           </div>
-        </section>
+        </section>}
 
-        <section>
+        {visible("trend") && <section>
           <h2>{kind === "year" ? "月ごとの推移" : "日ごとの推移"}</h2>
           <div className="inline-actions">
             <select
@@ -219,9 +216,9 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
             ))}
           </div>
           <p className="hint">主行動のみ（ながらは含めません）。日付をまたぐ予定は0時で分けて、それぞれの日に数えます。</p>
-        </section>
+        </section>}
 
-        <section>
+        {visible("nagara") && <section>
           <h2>ながら・重なり</h2>
           <h3>ながら（ラベル別の合計・日ごとの推移）</h3>
           {stats.nagaraTotals.length === 0 ? <p className="hint">この期間のながらはありません。</p> : (
@@ -272,6 +269,10 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
               </table>
             </div>
           )}
+        </section>}
+
+        {visible("place") && <section>
+          <h2>場所</h2>
           <h3>場所の大分類ごとの時間</h3>
           <p className="hint">イベントの入力で選んだ大分類でまとめます。場所が複数でも大分類が1つなら、その大分類だけに入ります。大分類を選んでいない場所は「未分類」です（家・職場・電車・徒歩などは自動）。</p>
           {stats.placeKindTotals.length === 0 ? <p className="hint">この期間の場所はありません。</p> : (
@@ -292,12 +293,12 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           )}
           <h3>場所・移動ごとの時間</h3>
           <p className="hint">その場所だけ＝場所が1つのイベントと場所セッション。複数のうち＝場所を複数持つイベントの長さ（内訳は分からないので、足し合わせません）。</p>
-          {stats.placeTotals.length === 0 ? <p className="hint">この期間の場所はありません。</p> : (
+          {topPlaces.length === 0 ? <p className="hint">この条件の場所はありません。</p> : (
             <div className="table-scroll">
               <table className="data-table">
                 <thead><tr><th>場所</th><th>その場所だけ</th><th>複数のうち</th></tr></thead>
                 <tbody>
-                  {stats.placeTotals.map((p) => (
+                  {(showAllPlaces ? topPlaces : topPlaces.slice(0, 10)).map((p) => (
                     <tr key={p.label}>
                       <td>{p.label}</td>
                       <td>{formatDuration(p.minutes)}（{formatPercent(p.minutes, total)}）</td>
@@ -308,9 +309,10 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
               </table>
             </div>
           )}
-        </section>
+          {topPlaces.length > 10 && <button type="button" className="text-btn" onClick={() => setShowAllPlaces(!showAllPlaces)}>{showAllPlaces ? "上位10件に戻す" : `すべて見る（${topPlaces.length}件）`}</button>}
+        </section>}
 
-        {!settings.planOnly && <section>
+        {visible("travel") && <section>
           <h2>移動（マーカーの組）</h2>
           <p className="hint">対応する始まりと終わりが6時間以内のときだけ数えます。時間構成には含めません。</p>
           <div className="table-scroll"><table className="data-table"><thead><tr><th>組</th><th>回数</th><th>合計</th><th>平均</th><th>最短</th><th>最長</th></tr></thead><tbody>
@@ -321,15 +323,15 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           </tbody></table></div>)}
         </section>}
 
-        <section>
+        {visible("people") && <section>
           <h2>人</h2>
           <p className="hint">{settings.planOnly ? "予定" : "実績"}のうち、人を入れた記録を人ごとにまとめます。2人以上いる記録は、それぞれの人に同じ時間が入ります（足し合わせると実際より長くなります）。最後の日は、期間に関係なく今日までの記録から出します。名前を押すと、その人との記録を検索で開きます。</p>
-          {people.length === 0 ? <p className="hint">この期間に、人を入れた実績はありません。</p> : (
+          {topPeople.length === 0 ? <p className="hint">この条件に、人を入れた記録はありません。</p> : (
             <div className="table-scroll">
               <table className="data-table">
                 <thead><tr><th>人</th><th>時間</th><th>日数（件数）</th><th>最後に会った日</th></tr></thead>
                 <tbody>
-                  {people.map((p) => (
+                  {(showAllPeople ? topPeople : topPeople.slice(0, 10)).map((p) => (
                     <tr key={p.name}>
                       <td><button type="button" className="person-link" onClick={() => onOpenPerson(p.name)}>{p.name}</button></td>
                       <td>{formatDuration(p.minutes)}</td>
@@ -341,9 +343,10 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
               </table>
             </div>
           )}
-        </section>
+          {topPeople.length > 10 && <button type="button" className="text-btn" onClick={() => setShowAllPeople(!showAllPeople)}>{showAllPeople ? "上位10件に戻す" : `すべて見る（${topPeople.length}件）`}</button>}
+        </section>}
 
-        {!settings.planOnly && <section>
+        {visible("unconfirmed") && <section>
           <h2>未確定の予定（{unconfirmed.length}件）</h2>
           {unconfirmed.length === 0 ? <p className="hint">この期間に未確定の予定はありません。</p> : (
             <ul className="unconfirmed-list">
@@ -358,6 +361,11 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
             </ul>
           )}
         </section>}
+
+        <section className="review-section-choices">
+          <button type="button" className="review-choice-trigger" onClick={() => setEditingSections(!editingSections)}>表示する項目<Icon name="chevron-right" size={16} /></button>
+          {editingSections && <div className="review-choice-list">{availableReviewSections(settings).map(([key, label]) => <button type="button" key={key} className="review-choice-row" aria-pressed={visible(key)} onClick={() => toggleSection(key)}><span>{label}</span><span>{visible(key) ? "オン" : "オフ"}</span></button>)}</div>}
+        </section>
       </div>
     </div>
   );

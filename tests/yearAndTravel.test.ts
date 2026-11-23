@@ -62,6 +62,24 @@ test("古い電車と通勤の寄り道を除き、含めると戻す", () => {
   assert.deepEqual(yearPeople(events, period, cutoff, cutoff, false, settings).map((person) => person.name), []);
 });
 
+test("週・月でも人と場所を除外でき、10件を超える行は一覧用に残る", () => {
+  const settings = defaultSettings();
+  settings.categoryParents["1"] = "仕事";
+  const events = [
+    { ...event("work", "仕事", "2026-11-02T09:00", "2026-11-02T10:00"), colorId: "1", people: ["同僚"], places: ["職場"] },
+    ...Array.from({ length: 12 }, (_, i) => ({ ...event(`friend-${i}`, "散歩", "2026-11-03T10:00", "2026-11-03T11:00"), people: [`友人${i}`], places: [`外出先＞公園${i}`] })),
+  ];
+  const cutoff = "2026-11-08T00:00";
+  for (const kind of ["week", "month"] as const) {
+    const period = periodOf(kind, "2026-11-03", 1);
+    const stats = computeReview(events, [], period, true, cutoff);
+    assert.equal(yearPeople(events, period, cutoff, cutoff, false, settings).length, 12);
+    assert.equal(yearPeople(events, period, cutoff, cutoff, true, settings).length, 13);
+    assert.equal(yearPlaces(stats, events, [], period, cutoff, false, settings).length, 12);
+    assert.equal(yearPlaces(stats, events, [], period, cutoff, true, settings).length, 13);
+  }
+});
+
 test("移動の組は途中の再開始・日またぎ・6時間超え・未対を処理する", () => {
   const markers = [
     marker("a", "家を出た", "2026-01-02T08:00"),

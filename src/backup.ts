@@ -210,6 +210,10 @@ export function validateBackup(value: unknown): ValidationResult {
   }
   // 「前回」の一覧の項目は v0.6.0 で追加。無いバックアップは空として読む
   const lastItems = value.settings.lastItems;
+  if (value.settings.hiddenReviewSections !== undefined &&
+      (!Array.isArray(value.settings.hiddenReviewSections) || !value.settings.hiddenReviewSections.every((key) => typeof key === "string"))) {
+    return { ok: false, reason: "settings.hiddenReviewSections が文字列の配列ではありません" };
+  }
   if (lastItems !== undefined) {
     if (!Array.isArray(lastItems)) return { ok: false, reason: "settings.lastItems が配列ではありません" };
     for (const [i, x] of lastItems.entries()) {
@@ -228,6 +232,7 @@ export function validateBackup(value: unknown): ValidationResult {
         startView: migrated.startView, weekdayBedtime: migrated.weekdayBedtime, holidayBedtime: migrated.holidayBedtime,
         lastItems: migrated.lastItems,
         planOnly: migrated.planOnly,
+        ...(migrated.hiddenReviewSections !== undefined ? { hiddenReviewSections: migrated.hiddenReviewSections } : {}),
       },
     },
   };
@@ -276,5 +281,6 @@ export function settingsForRestore(backup: BackupFile, sourceVersion: 1 | 2, cur
     holidayBedtime: current.holidayBedtime,
     lastItems: current.lastItems,
     planOnly: current.planOnly,
+    hiddenReviewSections: current.hiddenReviewSections,
   };
 }

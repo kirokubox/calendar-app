@@ -159,6 +159,8 @@ export interface Settings {
   lastItems: LastItem[];
   /** 予定だけのかんたん表示。未設定ならオフ */
   planOnly?: boolean;
+  /** 振り返り画面で隠す節。無い古い設定は表示モードの既定値を使う */
+  hiddenReviewSections?: string[];
 }
 
 /** 場所の大分類。場所欄の1件は「大分類＞詳しい名前」か「大分類」だけの文字で持つ（v0.7.0〜） */
