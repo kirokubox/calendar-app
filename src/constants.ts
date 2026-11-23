@@ -1,6 +1,6 @@
 import type { ParentCategory, PlaceKind, Settings } from "./types.js";
 
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.0.1";
 export const BACKUP_APP_NAME = "calendar-app";
 export const PHOTO_MAX_EDGE = 1200;
 export const THUMB_MAX_EDGE = 360;

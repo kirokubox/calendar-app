@@ -91,6 +91,18 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
     void onSaveSettings({ ...settings, hiddenReviewSections: next });
   };
 
+  // 人・場所の「除く／含める」（v1.0.0で上の段から各節の中へ移した。本人「人と場所を含めるの機能の違い意味がわかんない」）
+  const routineFilter = (
+    <div className="review-routine-filter">
+      <span>仕事・家・移動を</span>
+      <div className="segmented" role="group" aria-label="仕事・家・職場・移動・通勤を数えるか">
+        <button type="button" className={!includeRoutine ? "on" : ""} aria-pressed={!includeRoutine} onClick={() => { setIncludeRoutine(false); setShowAllPeople(false); setShowAllPlaces(false); }}>除く</button>
+        <button type="button" className={includeRoutine ? "on" : ""} aria-pressed={includeRoutine} onClick={() => { setIncludeRoutine(true); setShowAllPeople(false); setShowAllPlaces(false); }}>含める</button>
+      </div>
+      <p className="hint">{includeRoutine ? "仕事の記録・家・職場・移動・通勤もすべて数えます。" : "仕事の記録・家・職場・移動・通勤を数えず、誰と・どこで過ごしたかを見やすくします。"}</p>
+    </div>
+  );
+
   return (
     <div className="review">
       <header className="topbar">
@@ -106,10 +118,12 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
               </button>
             ))}
           </div>
+          <div className="review-period">
           <button type="button" className="icon-btn" aria-label={`前の${KIND_LABEL[kind]}`} onClick={() => move(-1)}><Icon name="chevron-left" /></button>
           <span className="review-label">{periodLabel(period)}</span>
           <button type="button" className="icon-btn" aria-label={`次の${KIND_LABEL[kind]}`} onClick={() => move(1)}><Icon name="chevron-right" /></button>
-          <button type="button" className="text-btn" onClick={() => onChange(kind, todayKey)} disabled={isCurrent}>今日</button>
+          <button type="button" className="text-btn review-today" onClick={() => onChange(kind, todayKey)} disabled={isCurrent}>今日</button>
+          </div>
         </div>
       </header>
 
@@ -128,7 +142,6 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
           </div>
           <p className="hint">月を押すと、その月の振り返りを開きます。未来の月には時間を入れません。</p>
         </section>}
-        {(visible("people") || visible("place")) && <div className="review-routine-filter"><span>人・場所</span><div className="segmented" role="group" aria-label="仕事・通勤などを含めるか"><button type="button" className={!includeRoutine ? "on" : ""} aria-pressed={!includeRoutine} onClick={() => { setIncludeRoutine(false); setShowAllPeople(false); setShowAllPlaces(false); }}>除く</button><button type="button" className={includeRoutine ? "on" : ""} aria-pressed={includeRoutine} onClick={() => { setIncludeRoutine(true); setShowAllPeople(false); setShowAllPlaces(false); }}>含める</button></div></div>}
         <section>
           <h2>時間構成{drilled ? `：${drilled.name}` : ""}</h2>
           {drilled && (
@@ -294,6 +307,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
             </div>
           )}
           <h3>場所・移動ごとの時間</h3>
+          {routineFilter}
           <p className="hint">その場所だけ＝場所が1つのイベントと場所セッション。複数のうち＝場所を複数持つイベントの長さ（内訳は分からないので、足し合わせません）。</p>
           {topPlaces.length === 0 ? <p className="hint">この条件の場所はありません。</p> : (
             <div className="table-scroll">
@@ -327,6 +341,7 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
 
         {visible("people") && <section>
           <h2>人</h2>
+          {routineFilter}
           <p className="hint">{settings.planOnly ? "予定" : "実績"}のうち、人を入れた記録を人ごとにまとめます。2人以上いる記録は、それぞれの人に同じ時間が入ります（足し合わせると実際より長くなります）。最後の日は、期間に関係なく今日までの記録から出します。名前を押すと、その人との記録を検索で開きます。</p>
           {topPeople.length === 0 ? <p className="hint">この条件に、人を入れた記録はありません。</p> : (
             <div className="table-scroll">
