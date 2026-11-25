@@ -60,6 +60,30 @@ function SettingRow({ label, value, onClick }: { label: string; value?: string; 
   return <button type="button" className="setting-row" onClick={onClick}><span className="setting-row-name">{label}</span>{value && <span className="setting-row-value">{value}</span>}<Icon name="chevron-right" size={18} /></button>;
 }
 
+/** オン・オフはその場で切り替える（一般アプリの設定と同じ。開かない。v1.2.0） */
+function SwitchRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="setting-row switch-row">
+      <span className="setting-row-name">{label}</span>
+      <input type="checkbox" role="switch" className="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  );
+}
+
+/** 選ぶものの一覧（押すとすぐ反映。選んでいるものに印。v1.2.0。前はブラウザ標準の選択欄） */
+function ChoiceList<T extends string | number>({ options, value, disabled, onPick }: { options: Array<{ value: T; label: string }>; value: T; disabled?: boolean; onPick: (v: T) => void }) {
+  return (
+    <div className="settings-menu choice-list" role="radiogroup">
+      {options.map((o) => (
+        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} className="setting-row" disabled={disabled} onClick={() => onPick(o.value)}>
+          <span className="setting-row-name">{o.label}</span>
+          {o.value === value && <span className="choice-check" aria-hidden="true">✓</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function SettingsView({
   settings, events, nagara, revisions, recurrences, markers, activeSleep, ruleMessage, onBack, onSaveSettings, onAddRule, onEditRule, onToggleRule, onDeleteRecurrence, onRestore, onImportGoogle,
 }: Props) {
@@ -176,7 +200,7 @@ export default function SettingsView({
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) { setRestoreError(e instanceof Error ? e.message : "ZIPを保存できませんでした"); }
+    } catch (e) { setRestoreError(e instanceof Error ? e.message : "写真つきで保存できませんでした"); }
     setBusy(false);
   };
 
@@ -234,7 +258,7 @@ export default function SettingsView({
     <div className="settings">
       <header className="topbar">
         <div className="topbar-row">
-          <button type="button" className="text-btn" onClick={screen === "home" ? onBack : () => setScreen("home")}><Icon name="arrow-left" size={18} />{screen === "home" ? "カレンダーへ" : "設定へ"}</button>
+          <button type="button" className="icon-btn" aria-label={screen === "home" ? "カレンダーへ戻る" : "設定へ戻る"} onClick={screen === "home" ? onBack : () => setScreen("home")}><Icon name="chevron-left" size={24} /></button>
           <h1 className="settings-title">{SCREEN_TITLE[screen]}</h1>
         </div>
       </header>
@@ -244,32 +268,29 @@ export default function SettingsView({
           <section className="settings-menu"><h2>表示</h2>
             <SettingRow label="起動時の表示" value={{ day: "日", week: "週", month: "月" }[settings.startView]} onClick={() => setScreen("start")} />
             <SettingRow label="週の始まり" value={`${weekdayName(settings.weekStartDay)}曜日`} onClick={() => setScreen("week")} />
-            <SettingRow label="予定だけで使う" value={settings.planOnly ? "オン" : "オフ"} onClick={() => setScreen("plan")} />
+            <SwitchRow label="予定だけで使う" checked={settings.planOnly === true} disabled={busy} onChange={(checked) => {
+              setBusy(true);
+              void onSaveSettings({ ...settings, planOnly: checked }).then(() => setPlanOnlyMessage("")).catch((err) => setPlanOnlyMessage(err instanceof Error ? err.message : "保存できませんでした")).finally(() => setBusy(false));
+            }} />
+            <p className="settings-foot">オンにすると実績・ながら・マーカーの入力を隠し、振り返りは予定で数えます。</p>
+            {planOnlyMessage && <p className="settings-foot" role="alert">{planOnlyMessage}</p>}
           </section>
           <section className="settings-menu"><h2>記録</h2>
             <SettingRow label="色とカテゴリ名" onClick={() => setScreen("labels")} />
             <SettingRow label="親カテゴリの割り当て" onClick={() => setScreen("parents")} />
             <SettingRow label="就寝予定の時刻" value={`仕事前 ${settings.weekdayBedtime ?? "未設定"}・休日前 ${settings.holidayBedtime ?? "未設定"}`} onClick={() => setScreen("bedtime")} />
             <SettingRow label="前回からの日数の項目" onClick={() => setScreen("last")} />
-            <SettingRow label="AI用書き出し" onClick={() => setScreen("ai")} />
             <SettingRow label="繰り返し" onClick={() => setScreen("recurrence")} />
-            <SettingRow label="Googleの取り込み" onClick={() => setScreen("google")} />
-            <SettingRow label=".icsの書き出し" onClick={() => setScreen("ics")} />
           </section>
-          <section className="settings-menu"><h2>バックアップ</h2><SettingRow label="保存と読み込み" onClick={() => setScreen("backup")} /></section>
-          <section className="settings-menu"><h2>このアプリについて</h2><SettingRow label="アプリの情報" onClick={() => setScreen("about")} /></section>
+          <section className="settings-menu"><h2>データ</h2>
+            <SettingRow label="バックアップ" onClick={() => setScreen("backup")} />
+            <SettingRow label="AI用書き出し" onClick={() => setScreen("ai")} />
+            <SettingRow label="ほかのカレンダーへ書き出す" onClick={() => setScreen("ics")} />
+            <SettingRow label="Googleカレンダーから取り込む" onClick={() => setScreen("google")} />
+          </section>
+          <section className="settings-menu"><h2>このアプリについて</h2><SettingRow label="バージョン" value={APP_VERSION} onClick={() => setScreen("about")} /></section>
         </>}
-        {screen === "plan" && <section>
-          <h2>予定だけで使う</h2>
-          <div className="view-switch"><span>予定だけで使う</span><div className="segmented" role="group" aria-label="予定だけで使う">{([false, true] as const).map((checked) => <button key={String(checked)} type="button" className={settings.planOnly === checked ? "on" : ""} aria-pressed={settings.planOnly === checked} disabled={busy} onClick={() => {
-            setBusy(true);
-            void onSaveSettings({ ...settings, planOnly: checked }).then(() => setPlanOnlyMessage("保存しました")).catch((err) => setPlanOnlyMessage(err instanceof Error ? err.message : "保存できませんでした")).finally(() => setBusy(false));
-          }}>{checked ? "オン" : "オフ"}</button>)}</div></div>
-          <p className="hint">オンにすると実績・ながら・マーカーの入力を隠し、振り返りはキャンセルしていない予定で数えます。オフに戻すと元の表示に戻ります。</p>
-          {planOnlyMessage && <p className="hint" role="status">{planOnlyMessage}</p>}
-        </section>}
         {screen === "labels" && <section>
-          <h2>色とカテゴリ名</h2>
           <p className="hint">色ごとにカテゴリ名を付けられます。名前を空にすると「他の色」に入ります。</p>
           <ul className="label-list">
             {rows.map((r) => (
@@ -294,7 +315,6 @@ export default function SettingsView({
         </section>}
 
         {screen === "parents" && <section>
-          <h2>親カテゴリの割り当て</h2>
           <p className="hint">色ごとに、振り返りで使う親カテゴリ（睡眠・生活・仕事・自由時間・その他）を選びます。</p>
           <ul className="label-list">
             {rows.map((r) => (
@@ -318,39 +338,17 @@ export default function SettingsView({
         </section>}
 
         {screen === "week" && <section>
-          <h2>週の始まり</h2>
-          <div className="inline-actions">
-            <select
-              value={settings.weekStartDay}
-              aria-label="週の始まりの曜日"
-              disabled={busy}
-              onChange={(e) => changeWeekStart(Number(e.target.value))}
-            >
-              {Array.from({ length: 7 }, (_, i) => <option key={i} value={i}>{weekdayName(i)}曜日</option>)}
-            </select>
-            {weekMessage && <span className="hint">{weekMessage}</span>}
-          </div>
+          <ChoiceList options={Array.from({ length: 7 }, (_, i) => ({ value: i, label: `${weekdayName(i)}曜日` }))} value={settings.weekStartDay} disabled={busy} onPick={(d) => void changeWeekStart(d)} />
+          {weekMessage && <p className="settings-foot" role="status">{weekMessage}</p>}
         </section>}
 
         {screen === "start" && <section>
-          <h2>起動時の表示</h2>
-          <div className="inline-actions">
-            <select
-              value={settings.startView}
-              aria-label="起動時の表示"
-              disabled={busy}
-              onChange={(e) => changeStartView(e.target.value as StartView)}
-            >
-              <option value="day">日</option>
-              <option value="week">週</option>
-              <option value="month">月</option>
-            </select>
-            {startMessage && <span className="hint">{startMessage}</span>}
-          </div>
+          <ChoiceList<StartView> options={[{ value: "day", label: "日" }, { value: "week", label: "週" }, { value: "month", label: "月" }]} value={settings.startView} disabled={busy} onPick={(v) => void changeStartView(v)} />
+          <p className="settings-foot">次に開いたときから、この表示で始まります。</p>
+          {startMessage && <p className="settings-foot" role="status">{startMessage}</p>}
         </section>}
 
         {screen === "bedtime" && <section>
-          <h2>就寝予定の時刻</h2>
           <p className="hint">明日が休み（土日・祝日・有休）なら休日前の時刻を使います。0:00〜4:59は前の日の夜の続きです。</p>
           <div className="bedtime-settings">
             <label><span>仕事前</span><input type="time" value={weekdayBedtime} onChange={(e) => { setWeekdayBedtime(e.target.value); setBedtimeMessage(""); }} /></label>
@@ -381,21 +379,16 @@ export default function SettingsView({
         {screen === "google" && <GoogleImportSettings events={events} onImport={onImportGoogle} />}
 
         {screen === "backup" && <section>
-          <h2>バックアップ</h2>
           <p className="hint">現在 {events.length} 件の予定・実績、{nagara.length} 件のながら・場所、{markers.length} 件のマーカーがあります。</p>
-          <div className="inline-actions">
-            <button type="button" className="secondary-btn" onClick={exportJson}>JSONで保存</button>
-            <button type="button" className="secondary-btn" onClick={() => void exportZip()} disabled={busy}>写真つきZIPで保存</button>
-            <label className="secondary-btn file-btn">
-              JSONから復元
-              <input ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => void onFile(e.target.files?.[0])} />
-            </label>
-            <label className="secondary-btn file-btn">
-              ZIPから復元
-              <input type="file" accept="application/zip,.zip" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <div className="settings-menu">
+            <button type="button" className="setting-row" onClick={exportJson}><span className="setting-row-name">バックアップを保存</span><span className="setting-row-value">写真なし</span></button>
+            <button type="button" className="setting-row" onClick={() => void exportZip()} disabled={busy}><span className="setting-row-name">写真つきで保存</span></button>
+            <label className="setting-row file-row">
+              <span className="setting-row-name">バックアップから読み込む</span>
+              <input ref={fileRef} type="file" accept="application/json,.json,application/zip,.zip" onChange={(e) => { void onFile(e.target.files?.[0]); }} />
             </label>
           </div>
-          <p className="hint">JSONには写真の本体が入りません。写真も残す場合はZIPで保存してください。写真は個別にも保存できます。</p>
+          <p className="settings-foot">写真なしのバックアップには写真の本体が入りません。写真も残すときは「写真つきで保存」を使ってください。</p>
           {restoreError && <p className="notice error" role="alert">{restoreError}</p>}
           {restoreMessage && <p className="notice ok">{restoreMessage}</p>}
           {pending && (
@@ -419,7 +412,6 @@ export default function SettingsView({
         </section>}
 
         {screen === "about" && <section>
-          <h2>このアプリについて</h2>
           <ul className="about">
             <li>データはこの端末のブラウザ内にだけ保存されます。サーバーには送信されません。</li>
             <li>ブラウザのデータ消去や端末の故障で失われることがあるため、定期的に「バックアップを保存」でバックアップしてください。</li>
