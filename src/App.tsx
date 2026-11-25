@@ -11,7 +11,7 @@ import { markerCandidates, markersForDay, nextCommuteMarker } from "./markerLogi
 import { eventDefaults } from "./migrate";
 import {
   continueRange,
-  applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, remainingPlanRanges, revisionsOfPlan,
+  applyCancel, applyUncancel, buildAsPlanned, buildRevision, isUnconfirmed, layoutDayWithPlans, linkedPlanIds, recordActualRange, revisionsOfPlan,
   shouldRecordRevision, unlinkActuals,
 } from "./planLogic";
 import {
@@ -628,8 +628,7 @@ export default function App() {
         onCancelPlan={handleCancelPlan}
         onUncancelPlan={handleUncancelPlan}
         onRecordActual={(plan) => {
-          const remaining = remainingPlanRanges(plan, events)[0] ?? { start: plan.start, end: plan.end };
-          setModal({ mode: "new", range: remaining, tab: "event", template: plan });
+          setModal({ mode: "new", range: recordActualRange(plan, events, toLocal(new Date())), tab: "event", template: plan });
         }}
         onSaveSession={handleSaveSession}
         onDeleteSession={handleDeleteSession}

@@ -5,7 +5,7 @@ import { eventDefaults } from "../src/migrate.js";
 import {
   barSeries, barTargetId, buildBreakdown, buildDiffRows, cancelledInPeriod, categoryName, computeReview, formatDuration, formatShare, formatSigned,
   equivalentPreviousCutoff, overlapsPeriod, parseBarTarget, periodCutoff, periodDays, periodFileName, periodOf, planChangesInPeriod,
-  shiftPeriod, stackedBarSeries, unconfirmedInPeriod,
+  minutesPerDay, shiftPeriod, stackedBarSeries, unconfirmedInPeriod,
 } from "../src/reviewLogic.js";
 import type { CalendarEvent, Nagara, PlanRevision } from "../src/types.js";
 
@@ -304,4 +304,21 @@ test("集計の行：同じ親カテゴリで細分類名が同じなら、色�
   assert.deepEqual(rows, ["共同垢", "記録垢"]);
   const day = stackedBarSeries(s, { type: "parent", name: "自由時間" }, settings).find((d) => d.date === "2026-10-06")!;
   assert.deepEqual(day.segments.map((x) => [x.label, x.minutes, x.color]), free.children.map((c) => [c.name, c.minutes, c.color]));
+});
+
+test("細分類の行の日数と1日あたり：0時をまたぐ記録は両方の日に数える（v1.1.0）", () => {
+  const events = [
+    ev("w1", "定時", "2026-10-06T09:00", "2026-10-06T17:00", { colorId: "11", subcategory: "定時" }),
+    ev("w2", "定時", "2026-10-07T09:00", "2026-10-07T17:00", { colorId: "11", subcategory: "定時" }),
+    ev("o1", "残業", "2026-10-07T23:00", "2026-10-08T01:00", { colorId: "11", subcategory: "残業" }),
+  ];
+  const s = computeReview(events, [], WEEK);
+  const work = buildBreakdown(s, settings).parents.find((p) => p.name === "仕事")!;
+  const regular = work.children.find((c) => c.name === "定時")!;
+  const over = work.children.find((c) => c.name === "残業")!;
+  assert.equal(regular.days, 2);
+  assert.equal(minutesPerDay(regular.minutes, regular.days), 480);
+  assert.equal(over.days, 2);
+  assert.equal(over.minutes, 120);
+  assert.equal(minutesPerDay(0, 0), 0);
 });

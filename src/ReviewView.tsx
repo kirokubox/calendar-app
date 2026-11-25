@@ -8,7 +8,7 @@ import { monthlyTrend, yearMonths, yearPeople, yearPlaces } from "./yearLogic";
 import { PieChart, StackedBarChart, type PieSlice } from "./ReviewCharts";
 import { availableReviewSections, hiddenReviewSections, isReviewSectionVisible } from "./reviewSections";
 import {
-  DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
+  DEFAULT_BAR_TARGET, barTargetId, buildBreakdown, minutesPerDay, buildDiffRows, categoryName, computeReview, formatDuration, formatPercent, formatShare,
   detailColor, equivalentPreviousCutoff, formatSigned, parseBarTarget, parentOf, periodCutoff, periodLabel, periodOf, planOnlyReviewEvents, shiftPeriod, stackedBarSeries,
   unconfirmedInPeriod, type BarTarget, type PeriodKind,
 } from "./reviewLogic";
@@ -155,7 +155,15 @@ export default function ReviewView({ events, nagara, markers, settings, nowLocal
                     <i className="dot" style={{ background: c.color }} />
                     <span className="share-name">{c.name}</span>
                     <span className="share-val">
-                      {formatDuration(c.minutes)}<br />全体 {formatPercent(c.minutes, total)}／{drilled.name}内 {formatPercent(c.minutes, drilled.minutes)}
+                      {formatDuration(c.minutes)}
+                      {c.days > 0 && (
+                        <>
+                          <br />
+                          {c.days}日・1日あたり {formatDuration(minutesPerDay(c.minutes, c.days))}
+                        </>
+                      )}
+                      <br />
+                      <span className="share-sub">全体 {formatPercent(c.minutes, total)}／{drilled.name}内 {formatPercent(c.minutes, drilled.minutes)}</span>
                     </span>
                   </li>
                 ))

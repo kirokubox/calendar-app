@@ -4,7 +4,7 @@ import { monthCellItems } from "../src/eventLogic.js";
 import { eventDefaults } from "../src/migrate.js";
 import {
   applyCancel, applyUncancel, buildAsPlanned, buildRevision, continueRange, diffSnapshots, isLinkedPlan, isUnconfirmed,
-  layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, remainingPlanRanges, revisionsOfPlan, shouldRecordRevision, snapshotOf, unlinkActuals,
+  layoutDayWithPlans, linkedPlanIds, planLabel, planVariant, recordActualRange, remainingPlanRanges, revisionsOfPlan, shouldRecordRevision, snapshotOf, unlinkActuals,
 } from "../src/planLogic.js";
 import type { CalendarEvent, Nagara } from "../src/types.js";
 
@@ -237,4 +237,16 @@ test("日の切り分け（v0.10.0）：まだ終わっていない予定は、�
   ];
   const { front } = layoutDayWithPlans(events, "2026-11-18", linkedPlanIds(events), "2026-11-18T14:00");
   assert.deepEqual(front.map((s) => s.event.id).sort(), ["a1", "p1"]);
+});
+
+test("実績を入力の時刻：予定の途中なら終わりを今（5分に丸める）、前後は予定の残りのまま（v1.1.0）", () => {
+  const plan = ev("p1", "作業", "2026-11-25T13:00", "2026-11-25T15:00");
+  assert.deepEqual(recordActualRange(plan, [plan], "2026-11-25T14:22"), { start: "2026-11-25T13:00", end: "2026-11-25T14:20" });
+  assert.deepEqual(recordActualRange(plan, [plan], "2026-11-25T12:30"), { start: "2026-11-25T13:00", end: "2026-11-25T15:00" });
+  assert.deepEqual(recordActualRange(plan, [plan], "2026-11-25T16:00"), { start: "2026-11-25T13:00", end: "2026-11-25T15:00" });
+  // 13:00〜13:30 がもう実績なら、残り 13:30〜 の途中で今まで
+  const done = ev("a1", "作業", "2026-11-25T13:00", "2026-11-25T13:30", { kind: "actual", planId: "p1" });
+  assert.deepEqual(recordActualRange(plan, [plan, done], "2026-11-25T14:00"), { start: "2026-11-25T13:30", end: "2026-11-25T14:00" });
+  // 丸めると始まりと同じになるときは残りのまま
+  assert.deepEqual(recordActualRange(plan, [plan], "2026-11-25T13:01"), { start: "2026-11-25T13:00", end: "2026-11-25T15:00" });
 });

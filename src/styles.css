@@ -378,6 +378,7 @@ button { cursor: pointer; }
 .share-btn:active { background: var(--kb-surface-2); }
 .share-name { font-weight: 600; flex: none; }
 .share-val { margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.share-sub { color: var(--muted); font-size: 0.75rem; }
 .share-chev { display: inline-flex; color: var(--kb-text-3); }
 .share-list .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; display: inline-block; }
 .share-list li { display: flex; align-items: center; gap: 8px; padding: 0 6px; }

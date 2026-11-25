@@ -261,3 +261,15 @@ export function planLabel(plan: CalendarEvent): string {
   if (plan.allDay) return `${plan.title} 終日`;
   return `${plan.title} ${timePart(plan.start)}–${timePart(plan.end)}`;
 }
+
+/**
+ * 予定を開いて「実績を入力」したときの時刻（v1.1.0）：まだ実績になっていない残りの範囲。
+ * 今がその範囲の途中なら、終わりを今（5分に丸める）にする（本人 2026-11-25「予定内の時間内ならその時までの時間で初期時間にして欲しい」）。
+ * 予定の前・あと、終日の予定は、今までどおり残りの範囲のまま。
+ */
+export function recordActualRange(plan: CalendarEvent, events: CalendarEvent[], now: string): { start: string; end: string } {
+  const remaining = remainingPlanRanges(plan, events)[0] ?? { start: plan.start, end: plan.end };
+  if (plan.allDay || !(remaining.start < now && now < remaining.end)) return remaining;
+  const end = localFromMinutes(datePart(now), roundTo(timeToMinutes(timePart(now)), 5));
+  return end > remaining.start && end < remaining.end ? { start: remaining.start, end } : remaining;
+}
